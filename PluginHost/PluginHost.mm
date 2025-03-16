@@ -14,6 +14,7 @@
 
 #include <lldb/API/LLDB.h>
 #include <mach-o/dyld.h>
+#include <dlfcn.h>
 
 #include <map>
 #include <filesystem>
@@ -220,12 +221,71 @@ void MainLoopInterrupt() {
     }
 }
 
+using PluginDraw = void (*)();
+using PluginDrawDebugger = void(*)(lldb::SBDebugger&);
+
+void* g_plugin = nullptr;
+
+PluginDraw g_pluginDraw = nullptr;
+PluginDrawDebugger g_pluginDrawDebugger = nullptr;
+
+void ReloadPlugin() {
+    using namespace lldb::imgui;
+
+    if (g_plugin) {
+        if (dlclose(g_plugin)) {
+            Log("Failed to unload plugin: {}", dlerror());
+            return;
+        }
+
+        g_plugin = nullptr;
+        g_pluginDraw = nullptr;
+        g_pluginDrawDebugger = nullptr;
+    }
+
+    // TODO: Higly portable :)
+    const char* plugin = "/Users/mentlerd/Library/Developer/Xcode/DerivedData/lldb-imgui-eiltqhlrufmnwebfskzpjlvxzrsm/Build/Products/Debug/libPlugin.dylib";
+
+    g_plugin = dlopen(plugin, RTLD_LOCAL | RTLD_NOW);
+
+    if (!g_plugin) {
+        Log("Failed to load plugin: {}", dlerror());
+        return;
+    }
+
+    g_pluginDraw = reinterpret_cast<PluginDraw>(dlsym(g_plugin, "_ZN4lldb5imgui4DrawEv"));
+    g_pluginDrawDebugger = reinterpret_cast<PluginDrawDebugger>(dlsym(g_plugin, "_ZN4lldb5imgui4DrawERNS_10SBDebuggerE"));
+
+    Log("Plugin loaded: {} {}", (void*) g_pluginDraw, (void*) g_pluginDrawDebugger);
+}
+
 std::mutex g_debuggersMutex;
 std::map<lldb::user_id_t, lldb::SBDebugger> g_debuggers;
 
 void DrawFrame() {
     ImGui::NewFrame();
     ImGui::ShowDemoWindow();
+
+    ImGui::Begin("PluginHost");
+    {
+        using namespace lldb::imgui;
+
+        if (ImGui::Button("Reload plugin")) {
+            ReloadPlugin();
+        }
+
+        std::scoped_lock lock(g_logMutex);
+
+        for (auto i = 0; i < 64; i++) {
+            auto size = g_log.size();
+
+            if (size <= i) {
+                break;
+            }
+            ImGui::Text("%s", g_log.at(size - i - 1).c_str());
+        }
+    }
+    ImGui::End();
 
     ImGui::Begin("Debuggers");
     {
@@ -246,6 +306,10 @@ void DrawFrame() {
 
             return false;
         });
+    }
+
+    if (g_pluginDraw) {
+        g_pluginDraw();
     }
 
     ImGui::End();
@@ -389,6 +453,10 @@ void Draw(lldb::SBTarget target) {
 void Draw(lldb::SBDebugger& debugger) {
     for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
         Draw(debugger.GetTargetAtIndex(j));
+    }
+
+    if (g_pluginDrawDebugger) {
+        g_pluginDrawDebugger(debugger);
     }
 }
 
