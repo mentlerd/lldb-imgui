@@ -1,0 +1,688 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		D56839912D8740CB00D7F7DE /* libimgui.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D56839672D87406C00D7F7DE /* libimgui.a */; };
+		D56839A12D87413300D7F7DE /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D54364AD2CF2876800F6C8C1 /* Cocoa.framework */; };
+		D56839A22D87413F00D7F7DE /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57ABDBA2D83328C00044B53 /* Metal.framework */; };
+		D56839A32D87414600D7F7DE /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57ABDC02D8333C200044B53 /* MetalKit.framework */; };
+		D56839A42D87419300D7F7DE /* GameController.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57ABDBE2D8332B400044B53 /* GameController.framework */; };
+		D56839E12D8743C400D7F7DE /* libPluginHost.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = D543649F2CF2010500F6C8C1 /* libPluginHost.dylib */; };
+		D56839E92D87443D00D7F7DE /* LLDB.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D54364B02CF3369F00F6C8C1 /* LLDB.framework */; };
+		D56839EC2D87459A00D7F7DE /* LLDB.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D54364B02CF3369F00F6C8C1 /* LLDB.framework */; };
+		D56839ED2D87459A00D7F7DE /* LLDB.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = D54364B02CF3369F00F6C8C1 /* LLDB.framework */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D57057762D86EA4600ED9BDA /* LLDB.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D57057752D86EA4600ED9BDA /* LLDB.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D56839922D8740CB00D7F7DE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D54364892CF200D200F6C8C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D56839662D87406C00D7F7DE;
+			remoteInfo = imgui;
+		};
+		D56839A52D8741AB00D7F7DE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D54364892CF200D200F6C8C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D543649E2CF2010500F6C8C1;
+			remoteInfo = PluginHost;
+		};
+		D56839E32D8743C400D7F7DE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D54364892CF200D200F6C8C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D543649E2CF2010500F6C8C1;
+			remoteInfo = PluginHost;
+		};
+		D56839EF2D87471400D7F7DE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D54364892CF200D200F6C8C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D56839D52D8742F000D7F7DE;
+			remoteInfo = Plugin;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D56839252D873DBA00D7F7DE /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+		D56839EE2D87459A00D7F7DE /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				D56839ED2D87459A00D7F7DE /* LLDB.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		D543649F2CF2010500F6C8C1 /* libPluginHost.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libPluginHost.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		D54364AD2CF2876800F6C8C1 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		D54364B02CF3369F00F6C8C1 /* LLDB.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LLDB.framework; path = ../../../../../../Applications/Xcode.app/Contents/SharedFrameworks/LLDB.framework; sourceTree = "<group>"; };
+		D54364E72CF33CD600F6C8C1 /* lldb-rpc-server */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; name = "lldb-rpc-server"; path = "../../../../../../Applications/Xcode.app/Contents/SharedFrameworks/LLDBRPC.framework/Versions/A/Resources/lldb-rpc-server"; sourceTree = "<group>"; };
+		D56839272D873DBA00D7F7DE /* App */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = App; sourceTree = BUILT_PRODUCTS_DIR; };
+		D56839672D87406C00D7F7DE /* libimgui.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libimgui.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		D56839D62D8742F000D7F7DE /* libPlugin.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = libPlugin.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		D57057752D86EA4600ED9BDA /* LLDB.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = LLDB.framework; path = ../../../../../../Applications/Xcode_16.2.app/Contents/SharedFrameworks/LLDB.framework; sourceTree = "<group>"; };
+		D57ABDBA2D83328C00044B53 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		D57ABDBC2D83329200044B53 /* OpenGL.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OpenGL.framework; path = System/Library/Frameworks/OpenGL.framework; sourceTree = SDKROOT; };
+		D57ABDBE2D8332B400044B53 /* GameController.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = GameController.framework; path = System/Library/Frameworks/GameController.framework; sourceTree = SDKROOT; };
+		D57ABDC02D8333C200044B53 /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		D54364A02CF2010500F6C8C1 /* PluginHost */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = PluginHost;
+			sourceTree = "<group>";
+		};
+		D56839282D873DBA00D7F7DE /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = App;
+			sourceTree = "<group>";
+		};
+		D56839682D87406C00D7F7DE /* imgui */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = imgui;
+			sourceTree = "<group>";
+		};
+		D56839D72D8742F000D7F7DE /* Plugin */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Plugin;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D543649D2CF2010500F6C8C1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D57057762D86EA4600ED9BDA /* LLDB.framework in Frameworks */,
+				D56839912D8740CB00D7F7DE /* libimgui.a in Frameworks */,
+				D56839A42D87419300D7F7DE /* GameController.framework in Frameworks */,
+				D56839A22D87413F00D7F7DE /* Metal.framework in Frameworks */,
+				D56839A32D87414600D7F7DE /* MetalKit.framework in Frameworks */,
+				D56839A12D87413300D7F7DE /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839242D873DBA00D7F7DE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D56839EC2D87459A00D7F7DE /* LLDB.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839652D87406C00D7F7DE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839D42D8742F000D7F7DE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D56839E92D87443D00D7F7DE /* LLDB.framework in Frameworks */,
+				D56839E12D8743C400D7F7DE /* libPluginHost.dylib in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D54364882CF200D200F6C8C1 = {
+			isa = PBXGroup;
+			children = (
+				D56839282D873DBA00D7F7DE /* App */,
+				D54364A02CF2010500F6C8C1 /* PluginHost */,
+				D56839D72D8742F000D7F7DE /* Plugin */,
+				D56839682D87406C00D7F7DE /* imgui */,
+				D54364AC2CF2876700F6C8C1 /* Frameworks */,
+				D54364922CF200D200F6C8C1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D54364922CF200D200F6C8C1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D543649F2CF2010500F6C8C1 /* libPluginHost.dylib */,
+				D56839272D873DBA00D7F7DE /* App */,
+				D56839672D87406C00D7F7DE /* libimgui.a */,
+				D56839D62D8742F000D7F7DE /* libPlugin.dylib */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D54364AC2CF2876700F6C8C1 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				D57057752D86EA4600ED9BDA /* LLDB.framework */,
+				D57ABDC02D8333C200044B53 /* MetalKit.framework */,
+				D57ABDBE2D8332B400044B53 /* GameController.framework */,
+				D57ABDBC2D83329200044B53 /* OpenGL.framework */,
+				D57ABDBA2D83328C00044B53 /* Metal.framework */,
+				D54364E72CF33CD600F6C8C1 /* lldb-rpc-server */,
+				D54364B02CF3369F00F6C8C1 /* LLDB.framework */,
+				D54364AD2CF2876800F6C8C1 /* Cocoa.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		D543649B2CF2010500F6C8C1 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839632D87406C00D7F7DE /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839D22D8742F000D7F7DE /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		D543649E2CF2010500F6C8C1 /* PluginHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D54364A72CF2010500F6C8C1 /* Build configuration list for PBXNativeTarget "PluginHost" */;
+			buildPhases = (
+				D543649B2CF2010500F6C8C1 /* Headers */,
+				D543649C2CF2010500F6C8C1 /* Sources */,
+				D543649D2CF2010500F6C8C1 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D56839932D8740CB00D7F7DE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D54364A02CF2010500F6C8C1 /* PluginHost */,
+			);
+			name = PluginHost;
+			packageProductDependencies = (
+			);
+			productName = Plugin;
+			productReference = D543649F2CF2010500F6C8C1 /* libPluginHost.dylib */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+		D56839262D873DBA00D7F7DE /* App */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D568392B2D873DBA00D7F7DE /* Build configuration list for PBXNativeTarget "App" */;
+			buildPhases = (
+				D56839232D873DBA00D7F7DE /* Sources */,
+				D56839242D873DBA00D7F7DE /* Frameworks */,
+				D56839252D873DBA00D7F7DE /* CopyFiles */,
+				D56839EE2D87459A00D7F7DE /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D56839F02D87471400D7F7DE /* PBXTargetDependency */,
+				D56839A62D8741AB00D7F7DE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D56839282D873DBA00D7F7DE /* App */,
+			);
+			name = App;
+			packageProductDependencies = (
+			);
+			productName = App;
+			productReference = D56839272D873DBA00D7F7DE /* App */;
+			productType = "com.apple.product-type.tool";
+		};
+		D56839662D87406C00D7F7DE /* imgui */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D568396F2D87406C00D7F7DE /* Build configuration list for PBXNativeTarget "imgui" */;
+			buildPhases = (
+				D56839632D87406C00D7F7DE /* Headers */,
+				D56839642D87406C00D7F7DE /* Sources */,
+				D56839652D87406C00D7F7DE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				D56839682D87406C00D7F7DE /* imgui */,
+			);
+			name = imgui;
+			packageProductDependencies = (
+			);
+			productName = imgui;
+			productReference = D56839672D87406C00D7F7DE /* libimgui.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		D56839D52D8742F000D7F7DE /* Plugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D56839DE2D8742F000D7F7DE /* Build configuration list for PBXNativeTarget "Plugin" */;
+			buildPhases = (
+				D56839D22D8742F000D7F7DE /* Headers */,
+				D56839D32D8742F000D7F7DE /* Sources */,
+				D56839D42D8742F000D7F7DE /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D56839E42D8743C400D7F7DE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				D56839D72D8742F000D7F7DE /* Plugin */,
+			);
+			name = Plugin;
+			packageProductDependencies = (
+			);
+			productName = Plugin;
+			productReference = D56839D62D8742F000D7F7DE /* libPlugin.dylib */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D54364892CF200D200F6C8C1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1610;
+				TargetAttributes = {
+					D543649E2CF2010500F6C8C1 = {
+						CreatedOnToolsVersion = 16.1;
+					};
+					D56839262D873DBA00D7F7DE = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					D56839662D87406C00D7F7DE = {
+						CreatedOnToolsVersion = 16.2;
+					};
+					D56839D52D8742F000D7F7DE = {
+						CreatedOnToolsVersion = 16.2;
+					};
+				};
+			};
+			buildConfigurationList = D543648C2CF200D200F6C8C1 /* Build configuration list for PBXProject "lldb-imgui" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = D54364882CF200D200F6C8C1;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D54364922CF200D200F6C8C1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D56839262D873DBA00D7F7DE /* App */,
+				D543649E2CF2010500F6C8C1 /* PluginHost */,
+				D56839D52D8742F000D7F7DE /* Plugin */,
+				D56839662D87406C00D7F7DE /* imgui */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D543649C2CF2010500F6C8C1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839232D873DBA00D7F7DE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839642D87406C00D7F7DE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D56839D32D8742F000D7F7DE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D56839932D8740CB00D7F7DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D56839662D87406C00D7F7DE /* imgui */;
+			targetProxy = D56839922D8740CB00D7F7DE /* PBXContainerItemProxy */;
+		};
+		D56839A62D8741AB00D7F7DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D543649E2CF2010500F6C8C1 /* PluginHost */;
+			targetProxy = D56839A52D8741AB00D7F7DE /* PBXContainerItemProxy */;
+		};
+		D56839E42D8743C400D7F7DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D543649E2CF2010500F6C8C1 /* PluginHost */;
+			targetProxy = D56839E32D8743C400D7F7DE /* PBXContainerItemProxy */;
+		};
+		D56839F02D87471400D7F7DE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D56839D52D8742F000D7F7DE /* Plugin */;
+			targetProxy = D56839EF2D87471400D7F7DE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		D54364962CF200D200F6C8C1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 2RA5FMQD24;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = /Applications/Xcode.app/Contents/SharedFrameworks;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LINKER_DISPLAYS_MANGLED_NAMES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.7;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = /opt/homebrew/Cellar/llvm/18.1.8.reinstall/include;
+			};
+			name = Debug;
+		};
+		D54364972CF200D200F6C8C1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "c++20";
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 2RA5FMQD24;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				FRAMEWORK_SEARCH_PATHS = /Applications/Xcode.app/Contents/SharedFrameworks;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LINKER_DISPLAYS_MANGLED_NAMES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.7;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = /opt/homebrew/Cellar/llvm/18.1.8.reinstall/include;
+			};
+			name = Release;
+		};
+		D54364A82CF2010500F6C8C1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Plugin/imgui/examples/libs/glfw/lib-vc2010-32",
+					"$(PROJECT_DIR)/Plugin/imgui/examples/libs/glfw/lib-vc2010-64",
+					"$(PROJECT_DIR)/Plugin/imgui2/examples/libs/glfw/lib-vc2010-32",
+					"$(PROJECT_DIR)/Plugin/imgui2/examples/libs/glfw/lib-vc2010-64",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		D54364A92CF2010500F6C8C1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/Plugin/imgui/examples/libs/glfw/lib-vc2010-32",
+					"$(PROJECT_DIR)/Plugin/imgui/examples/libs/glfw/lib-vc2010-64",
+					"$(PROJECT_DIR)/Plugin/imgui2/examples/libs/glfw/lib-vc2010-32",
+					"$(PROJECT_DIR)/Plugin/imgui2/examples/libs/glfw/lib-vc2010-64",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		D568392C2D873DBA00D7F7DE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		D568392D2D873DBA00D7F7DE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_HARDENED_RUNTIME = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		D56839702D87406C00D7F7DE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		D56839712D87406C00D7F7DE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		D56839DF2D8742F000D7F7DE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		D56839E02D8742F000D7F7DE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DYLIB_COMPATIBILITY_VERSION = 1;
+				DYLIB_CURRENT_VERSION = 1;
+				EXECUTABLE_PREFIX = lib;
+				GCC_ENABLE_CPP_EXCEPTIONS = YES;
+				GCC_ENABLE_CPP_RTTI = YES;
+				GCC_SYMBOLS_PRIVATE_EXTERN = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D543648C2CF200D200F6C8C1 /* Build configuration list for PBXProject "lldb-imgui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D54364962CF200D200F6C8C1 /* Debug */,
+				D54364972CF200D200F6C8C1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D54364A72CF2010500F6C8C1 /* Build configuration list for PBXNativeTarget "PluginHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D54364A82CF2010500F6C8C1 /* Debug */,
+				D54364A92CF2010500F6C8C1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D568392B2D873DBA00D7F7DE /* Build configuration list for PBXNativeTarget "App" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D568392C2D873DBA00D7F7DE /* Debug */,
+				D568392D2D873DBA00D7F7DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D568396F2D87406C00D7F7DE /* Build configuration list for PBXNativeTarget "imgui" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D56839702D87406C00D7F7DE /* Debug */,
+				D56839712D87406C00D7F7DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D56839DE2D8742F000D7F7DE /* Build configuration list for PBXNativeTarget "Plugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D56839DF2D8742F000D7F7DE /* Debug */,
+				D56839E02D8742F000D7F7DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D54364892CF200D200F6C8C1 /* Project object */;
+}
