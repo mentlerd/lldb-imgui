@@ -189,16 +189,11 @@ void MainLoop() {
 
         [application setDelegate:applicationDelegate];
         [application run];
-
-        // Load plugin
-        auto plugin = GetExecutablePath().replace_filename("libPlugin.dylib");
-
-        lldb::imgui::Log("Will try to load {}", plugin.generic_string());
     });
 
     while (true) {
         NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                            untilDate:nil
+                                            untilDate:[NSDate distantFuture]
                                                inMode:NSDefaultRunLoopMode
                                               dequeue:YES];
 
