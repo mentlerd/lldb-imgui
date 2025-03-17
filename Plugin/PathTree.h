@@ -48,17 +48,22 @@ public:
             }
 
             // Adjust absolute path
-            parent.append("/");
+            if (!parent.empty()) {
+                parent.append("/");
+            }
             parent.append(path);
 
             // Try entering this level
             bool enter = descend(std::as_const(parent), std::as_const(path), *current);
 
-            parent.resize(parent.size() - path.size());
-
             if (enter) {
                 current->Traverse(descend, ascend, parent);
                 ascend();
+            }
+
+            parent.resize(parent.size() - path.size());
+            if (!parent.empty()) {
+                parent.resize(parent.size() - 1);
             }
         }
     }
@@ -89,7 +94,7 @@ auto PathTree<T>::Put(std::string_view dir, std::string_view name) -> PathTree& 
         return GetChild(name);
     }
 
-    auto index = dir.find('/');
+    auto index = dir.find('/', 1);
     if (index == 0) {
         return Put(dir.substr(1), name);
     }

@@ -262,10 +262,16 @@ void ReloadPlugin() {
         g_pluginDrawDebugger = nullptr;
     }
 
-    // TODO: Higly portable :)
-    const char* plugin = "/Users/mentlerd/Library/Developer/Xcode/DerivedData/lldb-imgui-eiltqhlrufmnwebfskzpjlvxzrsm/Build/Products/Debug/libPlugin.dylib";
+    Dl_info info;
+    if (dladdr(reinterpret_cast<void*>(ReloadPlugin), &info) == 0) {
+        Log("Failed to determine plugin host path");
+        return;
+    }
 
-    g_plugin = dlopen(plugin, RTLD_LOCAL | RTLD_NOW);
+    auto pluginPath = std::filesystem::path(info.dli_fname).replace_filename("libPlugin.dylib");
+
+    Log("Trying to load plugin from '{}'", pluginPath.c_str());
+    g_plugin = dlopen(pluginPath.c_str(), RTLD_LOCAL | RTLD_NOW);
 
     if (!g_plugin) {
         Log("Failed to load plugin: {}", dlerror());
@@ -374,9 +380,26 @@ namespace lldb {
 #define API __attribute__((used))
 
 API bool PluginInitialize(lldb::SBDebugger debugger) {
+    using namespace lldb::imgui;
+
     static std::once_flag once;
 
     std::call_once(once, []{
+        uint32_t capacity = 0;
+        _NSGetExecutablePath(nullptr, &capacity);
+
+        std::string buffer(capacity, 'A');
+        _NSGetExecutablePath(buffer.data(), &capacity);
+
+        buffer.resize(capacity - 1);
+
+        Log("Loaded into '{}'", buffer);
+
+        if (!buffer.ends_with("lldb-rpc-server")) {
+            Log("This doesn't appear to be lldb-rpc-server!");
+            return;
+        }
+
         lldb::imgui::HijackMainThread(MainLoop, MainLoopInterrupt);
     });
 

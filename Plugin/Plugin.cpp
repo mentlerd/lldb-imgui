@@ -1,5 +1,6 @@
 
 #include "PathTree.h"
+#include "CocoaWrapper.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -7,14 +8,38 @@
 #include "lldb/API/LLDB.h"
 
 #include <map>
+#include <any>
 
 namespace lldb::imgui {
 
 namespace {
 
+static ImGuiStorage g_storage;
+
+template<typename T>
+auto& Store(const char* id) {
+    std::any*& slot = *reinterpret_cast<std::any**>(g_storage.GetVoidPtrRef(ImGui::GetID(id), nullptr));
+
+    if (slot == nullptr) {
+        slot = new std::any(T());
+    }
+    return *std::any_cast<T>(slot);
+}
 
 void DrawModules(lldb::SBTarget& target) {
     using namespace ImGui;
+
+    bool* onlyWithValidCompileUnits = g_storage.GetBoolRef(GetID("cu"), true);
+    {
+        Checkbox("With CUs", onlyWithValidCompileUnits);
+
+        if (BeginItemTooltip()) {
+            Text("Only show SBModules with valid SBCompileUnits");
+            TextDisabled("(This is often a good indicator of debug info being present)");
+
+            EndTooltip();
+        }
+    }
 
     ImGuiTableFlags flags = 0;
 
@@ -42,27 +67,65 @@ void DrawModules(lldb::SBTarget& target) {
     // PathTree from all modules
     PathTree<lldb::SBModule> tree;
 
+    uint32_t numFiltered = 0;
+
     for (uint32_t i = 0; i < target.GetNumModules(); i++) {
         auto mod = target.GetModuleAtIndex(i);
+
+        if (*onlyWithValidCompileUnits) {
+            bool anyValid = false;
+
+            for (uint32_t i = 0; i < mod.GetNumCompileUnits(); i++) {
+                if (mod.GetCompileUnitAtIndex(i).IsValid()) {
+                    anyValid = true;
+                    break;
+                }
+            }
+
+            if (!anyValid) {
+                numFiltered++;
+                continue; // Filtered
+            }
+        }
 
         tree.Put(mod.GetFileSpec()).value = mod;
     }
 
     // Render table entries
-    const auto treeNode = [](auto&, const std::string& stem, PathTree<lldb::SBModule>& node) {
+    const auto treeNode = [=](const std::string& path, const std::string& stem, PathTree<lldb::SBModule>& node) {
         TableNextRow();
         TableNextColumn();
 
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAllColumns;
+
+        if (node.value) {
+            flags |= ImGuiTreeNodeFlags_Leaf;
+        } else {
+            flags |= ImGuiTreeNodeFlags_LabelSpanAllColumns;
+        }
+
+        bool isOpen = TreeNodeEx(stem.c_str(), flags);
+
+        if (BeginPopupContextItem()) {
+            TextDisabled("%s", path.c_str());
+
+            if (Selectable("Copy")) {
+                SetClipboardText(path.c_str());
+            }
+            if (Selectable("Show in Finder")) {
+                if (node.value) {
+                    OpenFileInFinder(path);
+                } else {
+                    OpenFolderInFinder(path);
+                }
+            }
+            EndPopup();
+        }
+
         if (!node.value) {
-            // Not a module but a filesystem junction
-            return TreeNodeEx(stem.c_str(), ImGuiTreeNodeFlags_LabelSpanAllColumns);
+            return isOpen;
         }
-
         auto& mod = *node.value;
-
-        if (TreeNodeEx(stem.c_str(), ImGuiTreeNodeFlags_Leaf)) {
-            TreePop();
-        }
 
         if (TableNextColumn()) {
             uint32_t versions[3];
@@ -96,9 +159,24 @@ void DrawModules(lldb::SBTarget& target) {
         if (TableNextColumn()) {
             Text("%s", mod.GetUUIDString());
         }
-        return false;
+        return isOpen;
     };
     tree.Traverse(treeNode, TreePop);
+
+    if (numFiltered) {
+        TableNextRow();
+        TableNextColumn();
+
+        TextDisabled(" ... (%d items filtered)", numFiltered);
+
+        if (BeginItemTooltip()) {
+            Text("Click to clear filters");
+            EndTooltip();
+        }
+        if (IsItemClicked()) {
+            *onlyWithValidCompileUnits = false;
+        }
+    }
 
     EndTable();
 }
@@ -215,21 +293,11 @@ void Draw(lldb::SBThread thread) {
     }
 }
 
-void Draw(lldb::SBTarget target) {
-    using namespace ImGui;
-
-    lldb::SBStream stream;
-    target.GetDescription(stream, lldb::DescriptionLevel::eDescriptionLevelBrief);
-
-    Text("%.*s", int(stream.GetSize()), stream.GetData());
-
+void DrawThreads(lldb::SBTarget target) {
     auto proc = target.GetProcess();
     if (!proc.IsValid()) {
+        ImGui::TextDisabled("No process");
         return;
-    }
-
-    if (Button("Step over")) {
-        proc.GetSelectedThread().StepOver();
     }
 
     for (uint32_t i = 0; i < proc.GetNumThreads(); i++) {
@@ -249,24 +317,29 @@ API void Draw(lldb::SBDebugger& debugger) {
     using namespace ImGui;
 
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "Debugger###SBDebugger(%llu)", debugger.GetID());
+    snprintf(buffer, sizeof(buffer), "Debugger %llu###SBDebugger(%llu)", debugger.GetID(), debugger.GetID());
 
     if (Begin(buffer)) {
-        for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
-            Draw(debugger.GetTargetAtIndex(j));
-        }
-
-        Text("Module");
-        SameLine();
-
         auto target = debugger.GetSelectedTarget();
-        if (!target.IsValid()) {
-            return;
-        }
+        if (!target) {
+            TextDisabled("Debugger has no selected target.");
+        } else {
+            lldb::SBStream stream;
+            target.GetDescription(stream, lldb::DescriptionLevel::eDescriptionLevelBrief);
 
-        if (BeginCombo("###foo", "Preview", ImGuiComboFlags_HeightLargest)) {
-            DrawModules(target);
-            EndCombo();
+            Text("Selected target: %.*s", int(stream.GetSize()), stream.GetData());
+
+            if (BeginTabBar("tabs")) {
+                if (BeginTabItem("Threads")) {
+                    DrawThreads(target);
+                    EndTabItem();
+                }
+                if (BeginTabItem("Modules")) {
+                    DrawModules(target);
+                    EndTabItem();
+                }
+                EndTabBar();
+            }
         }
     }
     End();
