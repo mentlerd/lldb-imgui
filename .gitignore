@@ -16,3 +16,6 @@ xcuserdata
 *.moved-aside
 *.xcuserstate
 *.xcscmblueprint
+
+## lldb-imgui
+build

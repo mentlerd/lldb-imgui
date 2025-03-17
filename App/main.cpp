@@ -1,7 +1,8 @@
 
-#include <iostream>
 #include <filesystem>
-#include <vector>
+#include <iostream>
+#include <print>
+#include <unordered_map>
 
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
@@ -17,21 +18,18 @@ std::filesystem::path GetExecutablePath() {
 }
 
 int main(int argc, const char* argv[]) {
-    auto plugin = GetExecutablePath().replace_filename("libPlugin.dylib");
+    // This is the command you are looking for :)
+    std::println("plugin load {}", GetExecutablePath().replace_filename("libPluginHost.dylib").generic_string());
 
-    dlerror();
+    // Create some stack variables for inspecting
+    std::unordered_map<int, std::unordered_map<int, std::string>> maps;
 
-    auto handle = dlopen(plugin.c_str(), RTLD_LOCAL | RTLD_NOW);
-    if (!handle) {
-        std::cout << dlerror() << std::endl;
-        return 1;
+    for (auto i = 0; i < 16; i++) {
+        for (auto j = 0; j < 100; j++) {
+            maps[i][j] = std::format("{}, {}", i, j);
+        }
     }
 
-    auto symbol = dlsym(handle, "_ZN4lldb16PluginInitializeENS_10SBDebuggerE");
-    if (!symbol) {
-        std::cout << dlerror() << std::endl;
-        return 2;
-    }
-
+    __builtin_debugtrap();
     return 0;
 }

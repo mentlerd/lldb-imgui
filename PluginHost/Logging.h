@@ -1,8 +1,8 @@
 #pragma once
 
-#include <thread>
 #include <format>
 #include <deque>
+#include <mutex>
 
 namespace lldb::imgui {
 
