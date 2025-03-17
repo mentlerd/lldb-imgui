@@ -1,4 +1,6 @@
 
+#include "PathTree.h"
+
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -10,136 +12,95 @@ namespace lldb::imgui {
 
 namespace {
 
+
 void DrawModules(lldb::SBTarget& target) {
     using namespace ImGui;
 
-    struct Node {
-        std::map<std::string_view, Node> children;
-        std::optional<lldb::SBModule> mod;
+    ImGuiTableFlags flags = 0;
 
-        Node& Put(std::string_view dir, std::string_view name) {
-            if (dir.empty()) {
-                return children[name];
-            }
+    flags |= ImGuiTableFlags_Hideable;
+    flags |= ImGuiTableFlags_Reorderable;
+    flags |= ImGuiTableFlags_BordersV;
+    flags |= ImGuiTableFlags_BordersOuterH;
+    flags |= ImGuiTableFlags_RowBg;
+    flags |= ImGuiTableFlags_NoBordersInBody;
+    flags |= ImGuiTableFlags_ScrollY;
 
-            auto index = dir.find('/');
-            if (index == 0) {
-                return Put(dir.substr(1), name);
-            }
-            if (index == std::string::npos) {
-                return children[dir].Put("", name);
-            }
+    ImVec2 size(0, GetTextLineHeightWithSpacing() * 20);
 
-            return children[dir.substr(0, index)].Put(dir.substr(index + 1), name);
-        }
+    if (!BeginTable("modules", 4, flags, size)) {
+        return;
+    }
 
-        void DrawChildren() {
-            std::string buffer;
+    TableSetupScrollFreeze(0, 1);
+    TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoReorder);
+    TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed);
+    TableSetupColumn("Triple", ImGuiTableColumnFlags_WidthFixed);
+    TableSetupColumn("UUID", ImGuiTableColumnFlags_WidthFixed);
+    TableHeadersRow();
 
-            for (auto& [name, child] : children) {
-                buffer.clear();
-                buffer.append(name);
-
-                // Descend until we hit a leaf/junction
-                Node* current = &child;
-
-                while (current->children.size() == 1) {
-                    auto& child = *current->children.begin();
-
-                    buffer.append("/");
-                    buffer.append(child.first);
-
-                    current = &child.second;
-                }
-
-                TableNextRow();
-                TableNextColumn();
-
-                if (auto& mod = current->mod) {
-                    if (TreeNodeEx(buffer.c_str(), ImGuiTreeNodeFlags_Leaf)) {
-                        TreePop();
-                    }
-
-                    if (TableNextColumn()) {
-                        uint32_t versions[3];
-
-                        // Unfortunately the SB API is quite wonky here, and doesn't really do
-                        // what is expected. Even if the is all zeros, the returned values
-                        // is are UINT32_MAX.0.0
-                        mod->GetVersion(versions, 3);
-
-                        if (versions[0] == UINT32_MAX) {
-                            TextDisabled("N/A");
-                        } else {
-                            buffer.clear();
-                            buffer.append(std::to_string(versions[0]));
-
-                            if (versions[1] != UINT32_MAX) {
-                                buffer.append(".");
-                                buffer.append(std::to_string(versions[1]));
-
-                                if (versions[2] != UINT32_MAX) {
-                                    buffer.append(".");
-                                    buffer.append(std::to_string(versions[2]));
-                                }
-                            }
-
-                            Text("%s", buffer.c_str());
-                        }
-                    }
-                    if (TableNextColumn()) {
-                        Text("%s", mod->GetTriple());
-                    }
-                    if (TableNextColumn()) {
-                        Text("%s", mod->GetUUIDString());
-                    }
-                } else {
-                    if (TreeNodeEx(buffer.c_str(), ImGuiTreeNodeFlags_LabelSpanAllColumns)) {
-                        current->DrawChildren();
-                        TreePop();
-                    }
-                }
-            }
-        }
-
-        void DrawTable() {
-            ImGuiTableFlags flags = 0;
-
-            flags |= ImGuiTableFlags_Hideable;
-            flags |= ImGuiTableFlags_Reorderable;
-
-            flags |= ImGuiTableFlags_BordersV;
-            flags |= ImGuiTableFlags_BordersOuterH;
-            flags |= ImGuiTableFlags_RowBg;
-            flags |= ImGuiTableFlags_NoBordersInBody;
-
-            flags |= ImGuiTableFlags_ScrollY;
-
-            ImVec2 size(0, GetTextLineHeightWithSpacing() * 20);
-
-            if (BeginTable("modules", 4, flags, size)) {
-                TableSetupScrollFreeze(0, 1);
-                TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoReorder);
-                TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed);
-                TableSetupColumn("Triple", ImGuiTableColumnFlags_WidthFixed);
-                TableSetupColumn("UUID", ImGuiTableColumnFlags_WidthFixed);
-                TableHeadersRow();
-
-                DrawChildren();
-
-                EndTable();
-            }
-        }
-    } tree;
+    // PathTree from all modules
+    PathTree<lldb::SBModule> tree;
 
     for (uint32_t i = 0; i < target.GetNumModules(); i++) {
         auto mod = target.GetModuleAtIndex(i);
-        auto spec = mod.GetFileSpec();
 
-        tree.Put(spec.GetDirectory(), spec.GetFilename()).mod = mod;
+        tree.Put(mod.GetFileSpec()).value = mod;
     }
 
-    tree.DrawTable();
+    // Render table entries
+    const auto treeNode = [](auto&, const std::string& stem, PathTree<lldb::SBModule>& node) {
+        TableNextRow();
+        TableNextColumn();
+
+        if (!node.value) {
+            // Not a module but a filesystem junction
+            return TreeNodeEx(stem.c_str(), ImGuiTreeNodeFlags_LabelSpanAllColumns);
+        }
+
+        auto& mod = *node.value;
+
+        if (TreeNodeEx(stem.c_str(), ImGuiTreeNodeFlags_Leaf)) {
+            TreePop();
+        }
+
+        if (TableNextColumn()) {
+            uint32_t versions[3];
+
+            // Unfortunately the SB API is quite wonky here, and doesn't really do
+            // what is expected. Even if the is all zeros, the returned values
+            // is are UINT32_MAX.0.0
+            mod.GetVersion(versions, 3);
+
+            if (versions[0] == UINT32_MAX) {
+                TextDisabled("N/A");
+            } else {
+                auto buffer = std::to_string(versions[0]);
+
+                if (versions[1] != UINT32_MAX) {
+                    buffer.append(".");
+                    buffer.append(std::to_string(versions[1]));
+
+                    if (versions[2] != UINT32_MAX) {
+                        buffer.append(".");
+                        buffer.append(std::to_string(versions[2]));
+                    }
+                }
+
+                Text("%s", buffer.c_str());
+            }
+        }
+        if (TableNextColumn()) {
+            Text("%s", mod.GetTriple());
+        }
+        if (TableNextColumn()) {
+            Text("%s", mod.GetUUIDString());
+        }
+        return false;
+    };
+    tree.Traverse(treeNode, TreePop);
+
+    EndTable();
 }
 
 bool CollapsingHeader2(const char* label, ImGuiTreeNodeFlags flags = 0) {
