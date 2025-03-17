@@ -51,9 +51,7 @@ void DrawModules(lldb::SBTarget& target) {
     flags |= ImGuiTableFlags_NoBordersInBody;
     flags |= ImGuiTableFlags_ScrollY;
 
-    ImVec2 size(0, GetTextLineHeightWithSpacing() * 20);
-
-    if (!BeginTable("modules", 4, flags, size)) {
+    if (!BeginTable("modules", 4, flags)) {
         return;
     }
 
@@ -332,7 +330,9 @@ API void Draw(lldb::SBDebugger& debugger) {
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "Debugger %llu###SBDebugger(%llu)", debugger.GetID(), debugger.GetID());
 
-    if (Begin(buffer)) {
+    SetNextWindowSize(ImVec2(1200, 750), ImGuiCond_Once);
+
+    if (Begin(buffer, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
         auto target = debugger.GetSelectedTarget();
         if (!target) {
             TextDisabled("Debugger has no selected target.");
