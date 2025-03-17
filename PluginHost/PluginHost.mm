@@ -264,30 +264,40 @@ std::map<lldb::user_id_t, lldb::SBDebugger> g_debuggers;
 
 void DrawFrame() {
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow();
 
-    ImGui::Begin("PluginHost");
-    {
-        using namespace lldb::imgui;
+    static bool s_showDemo = false;
+    static bool s_showLogs = false;
 
+    if (ImGui::BeginMainMenuBar()) {
         if (ImGui::Button("Reload plugin")) {
             ReloadPlugin();
         }
 
-        std::scoped_lock lock(g_logMutex);
-
-        for (auto i = 0; i < 64; i++) {
-            auto size = g_log.size();
-
-            if (size <= i) {
-                break;
-            }
-            ImGui::Text("%s", g_log.at(size - i - 1).c_str());
-        }
+        ImGui::Checkbox("Show demo", &s_showDemo);
+        ImGui::Checkbox("Show logs", &s_showLogs);
+        ImGui::EndMainMenuBar();
     }
-    ImGui::End();
+    if (s_showDemo) {
+        ImGui::ShowDemoWindow();
+    }
+    if (s_showLogs) {
+        if (ImGui::Begin("Logs")) {
+            using namespace lldb::imgui;
 
-    ImGui::Begin("Debuggers");
+            std::scoped_lock lock(g_logMutex);
+
+            for (auto i = 0; i < 64; i++) {
+                auto size = g_log.size();
+
+                if (size <= i) {
+                    break;
+                }
+                ImGui::Text("%s", g_log.at(size - i - 1).c_str());
+            }
+        }
+        ImGui::End();
+    }
+
     {
         std::scoped_lock lock(g_debuggersMutex);
         std::erase_if(g_debuggers, [](auto& pair) {
@@ -312,7 +322,6 @@ void DrawFrame() {
         g_pluginDraw();
     }
 
-    ImGui::End();
     ImGui::Render();
 }
 
@@ -451,13 +460,17 @@ void Draw(lldb::SBTarget target) {
 }
 
 void Draw(lldb::SBDebugger& debugger) {
-    for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
-        Draw(debugger.GetTargetAtIndex(j));
+    if (ImGui::Begin("Debuggers")) {
+        for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
+            Draw(debugger.GetTargetAtIndex(j));
+        }
+
+        if (g_pluginDrawDebugger) {
+            g_pluginDrawDebugger(debugger);
+        }
     }
 
-    if (g_pluginDrawDebugger) {
-        g_pluginDrawDebugger(debugger);
-    }
+    ImGui::End();
 }
 
 namespace lldb::imgui {
