@@ -8,7 +8,6 @@
 #import <MetalKit/MetalKit.h>
 
 #include "imgui.h"
-#include "imgui_internal.h"
 #include "imgui_impl_metal.h"
 #include "imgui_impl_osx.h"
 
@@ -177,6 +176,8 @@ std::filesystem::path GetExecutablePath() {
     return buffer;
 }
 
+void ReloadPlugin();
+
 void MainLoop() {
     static std::once_flag flag;
 
@@ -190,6 +191,8 @@ void MainLoop() {
 
         [application setDelegate:applicationDelegate];
         [application run];
+
+        ReloadPlugin();
     });
 
     while (true) {
@@ -325,154 +328,6 @@ void DrawFrame() {
     ImGui::Render();
 }
 
-bool CollapsingHeader2(const char* label, ImGuiTreeNodeFlags flags = 0) {
-    struct Scope {
-        Scope() :padding(ImGui::GetCurrentWindow()->WindowPadding.x) {
-            backup = std::exchange(padding, 0);
-        }
-        ~Scope() {
-            padding = backup;
-        }
-
-        float& padding;
-        float backup;
-    } scope;
-
-    return ImGui::CollapsingHeader(label, flags);
-}
-
-void Draw(lldb::SBFrame frame) {
-    using namespace ImGui;
-
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "#%d: %s ###frame", frame.GetFrameID(), frame.GetDisplayFunctionName());
-
-    bool isOpen = false;
-
-    PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2());
-    if (BeginTable("FrameHeaderTable", 2)) {
-        TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        TableSetupColumn("Focus", ImGuiTableColumnFlags_WidthFixed);
-
-        TableNextRow();
-        TableNextColumn();
-
-        PushID(frame.GetFrameID());
-        isOpen = CollapsingHeader2(buffer);
-        PopID();
-
-        TableNextColumn();
-
-        if (Button("!", ImVec2(GetTextLineHeight() * 2, 0))) {
-            auto thread = frame.GetThread();
-            auto debugger = thread.GetProcess().GetTarget().GetDebugger();
-
-            lldb::SBCommandReturnObject result;
-
-            snprintf(buffer, sizeof(buffer), "thread select %d", thread.GetIndexID());
-            debugger.GetCommandInterpreter().HandleCommand(buffer, result);
-
-            snprintf(buffer, sizeof(buffer), "frame select %d", frame.GetFrameID());
-            debugger.GetCommandInterpreter().HandleCommand(buffer, result);
-        }
-        if (IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay)) {
-            SetTooltip("Select this frame as the active (will synchronize with Xcode)");
-        }
-        EndTable();
-    }
-    PopStyleVar();
-
-    if (isOpen) {
-        TreePush((void*) uint64_t(frame.GetFrameID()));
-        Text("Dummy");
-        TreePop();
-    }
-}
-
-void Draw(lldb::SBThread thread) {
-    using namespace ImGui;
-
-    char buffer[128];
-    snprintf(buffer,
-             sizeof(buffer),
-             "%s (%d) %s ###thread",
-             thread.GetName() ? thread.GetName() : "Thread",
-             thread.GetIndexID(),
-             thread.GetQueueName() ? thread.GetQueueName() : "");
-
-    bool isOpen = false;
-
-    PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2());
-    if (BeginTable("FrameHeaderTable", 2)) {
-        TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        TableSetupColumn("Pin", ImGuiTableColumnFlags_WidthFixed);
-
-        TableNextRow();
-        TableNextColumn();
-
-        PushID((void*) thread.GetThreadID());
-        isOpen = CollapsingHeader2(buffer);
-        PopID();
-
-        TableNextColumn();
-
-        bool checked = false;
-        if (Checkbox("###pin", &checked)) {
-            // TODO: Build own datamodel, or piggyback on ImGui?
-        }
-        if (IsItemHovered(ImGuiHoveredFlags_DelayNormal | ImGuiHoveredFlags_NoSharedDelay)) {
-            SetTooltip("Pin this thread");
-        }
-
-        EndTable();
-    }
-    PopStyleVar();
-
-    if (isOpen) {
-        TreePush((void*) thread.GetThreadID());
-        for (uint32_t f = 0; f < thread.GetNumFrames(); f++) {
-            Draw(thread.GetFrameAtIndex(f));
-        }
-        TreePop();
-    }
-}
-
-void Draw(lldb::SBTarget target) {
-    using namespace ImGui;
-
-    lldb::SBStream stream;
-    target.GetDescription(stream, lldb::DescriptionLevel::eDescriptionLevelBrief);
-
-    Text("%.*s", int(stream.GetSize()), stream.GetData());
-
-    auto proc = target.GetProcess();
-    if (!proc.IsValid()) {
-        return;
-    }
-
-    if (Button("Step over")) {
-        proc.GetSelectedThread().StepOver();
-    }
-
-    for (uint32_t i = 0; i < proc.GetNumThreads(); i++) {
-        Draw(proc.GetThreadAtIndex(i));
-    }
-}
-
-void Draw(lldb::SBDebugger& debugger) {
-    if (ImGui::Begin("Debuggers")) {
-        for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
-            Draw(debugger.GetTargetAtIndex(j));
-        }
-
-        if (g_pluginDrawDebugger) {
-            g_pluginDrawDebugger(debugger);
-        }
-    }
-
-    ImGui::End();
-}
-
 namespace lldb::imgui {
 
 class LogsCommand : public lldb::SBCommandPluginInterface {
@@ -488,7 +343,9 @@ public:
 
 class DrawCommand : public lldb::SBCommandPluginInterface {
     bool DoExecute(lldb::SBDebugger debugger, char** command, lldb::SBCommandReturnObject& result) override {
-        Draw(debugger);
+        if (g_pluginDrawDebugger) {
+            g_pluginDrawDebugger(debugger);
+        }
         return true;
     }
 };
