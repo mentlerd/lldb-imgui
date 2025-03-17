@@ -167,14 +167,27 @@ void DrawModules(lldb::SBTarget& target) {
         TableNextRow();
         TableNextColumn();
 
-        TextDisabled(" ... (%d items filtered)", numFiltered);
+        ImGuiTreeNodeFlags flags = 0;
+
+        flags |= ImGuiTreeNodeFlags_Leaf;
+        flags |= ImGuiTreeNodeFlags_SpanAllColumns;
+
+        PushStyleColor(ImGuiCol_Text, GetStyleColorVec4(ImGuiCol_TextDisabled));
+        if (TreeNodeEx("###filtered", flags, "... (%d items filtered)", numFiltered)) {
+            TreePop();
+        }
+        PopStyleColor();
+
+        if (IsItemClicked()) {
+            *onlyWithValidCompileUnits = false;
+        }
+        if (IsItemActive() && IsKeyPressed(ImGuiKey_Enter)) {
+            *onlyWithValidCompileUnits = false;
+        }
 
         if (BeginItemTooltip()) {
             Text("Click to clear filters");
             EndTooltip();
-        }
-        if (IsItemClicked()) {
-            *onlyWithValidCompileUnits = false;
         }
     }
 
