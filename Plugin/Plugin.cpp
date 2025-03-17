@@ -248,9 +248,10 @@ API void Draw() {
 API void Draw(lldb::SBDebugger& debugger) {
     using namespace ImGui;
 
-    if (Begin("Debuggers")) {
-        Text("Debugger #%llu", debugger.GetID());
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "Debugger###SBDebugger(%llu)", debugger.GetID());
 
+    if (Begin(buffer)) {
         for (uint32_t j = 0; j < debugger.GetNumTargets(); j++) {
             Draw(debugger.GetTargetAtIndex(j));
         }
