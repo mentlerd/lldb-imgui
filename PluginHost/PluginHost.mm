@@ -48,6 +48,9 @@
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
+    // Assertions don't really help, we are inside the debugger itself
+    io.ConfigErrorRecoveryEnableAssert = false;
+
     ImGui::StyleColorsDark();
     ImGui_ImplMetal_Init(_device);
 
@@ -325,6 +328,7 @@ void DrawFrame() {
         g_pluginDraw();
     }
 
+    ImGui::EndFrame();
     ImGui::Render();
 }
 
