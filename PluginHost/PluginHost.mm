@@ -48,6 +48,19 @@
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
+    // Save settings between runs
+    {
+        auto path = std::make_unique<std::string>();
+
+        path->append(NSHomeDirectory().UTF8String);
+        path->append("/.lldb-imgui.ini");
+
+        lldb::imgui::Log("Will save ImGui settings to '{}'", *path);
+
+        io.IniFilename = path.release()->c_str();
+        io.IniSavingRate = 5.0f;
+    }
+
     // Assertions don't really help, we are inside the debugger itself
     io.ConfigErrorRecoveryEnableAssert = false;
 
