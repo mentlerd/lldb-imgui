@@ -303,10 +303,10 @@ void DrawFrame() {
         ImGui::EndMainMenuBar();
     }
     if (s_showDemo) {
-        ImGui::ShowDemoWindow();
+        ImGui::ShowDemoWindow(&s_showDemo);
     }
     if (s_showLogs) {
-        if (ImGui::Begin("Logs")) {
+        if (ImGui::Begin("Logs", &s_showLogs)) {
             using namespace lldb::imgui;
 
             std::scoped_lock lock(g_logMutex);
