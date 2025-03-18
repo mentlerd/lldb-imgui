@@ -1,6 +1,7 @@
 
 #include "PathTree.h"
 #include "CocoaWrapper.h"
+#include "LLDB_Exposer.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -9,6 +10,43 @@
 
 #include <map>
 #include <any>
+
+/// Private LLDB APIs
+namespace lldb_private {
+
+class CompileUnit {
+public:
+    lldb::LanguageType GetLanguage();
+
+    lldb::VariableListSP GetVariableList(bool);
+};
+
+};
+
+/// Forbidden magic for linking to private LLDB symbols - https://maskray.me/blog/2021-01-18-gnu-indirect-function
+///
+/// Annoyingly the `NAME_resolver()` functions keep getting generated in a way that clobbers x8, which
+/// is used for return value optimization in C++ ...
+///
+/// To not ruin the call, `x8` is saved in `x16` which is specified to be clobberable across call boundaries
+/// https://developer.arm.com/documentation/102374/0102/Procedure-Call-Standard
+extern "C" {
+
+#define IFUNC(NAME)                                                \
+    void* NAME##_addr = lldb::imgui::ResolvePrivateSymbol(#NAME);  \
+    void* NAME##_resolver() {                                      \
+        __asm__ volatile("mov x16,x8");                            \
+        auto tmp = NAME##_addr;                                    \
+        __asm__ volatile("mov x8,x16");                            \
+        return tmp;                                                \
+    }                                                              \
+    __attribute__((ifunc(#NAME "_resolver")))                      \
+    void NAME();
+
+IFUNC(_ZN12lldb_private11CompileUnit11GetLanguageEv);
+IFUNC(_ZN12lldb_private11CompileUnit15GetVariableListEb);
+
+}
 
 namespace lldb::imgui {
 
