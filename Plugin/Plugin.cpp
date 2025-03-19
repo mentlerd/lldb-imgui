@@ -6,6 +6,9 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+// TODO: Separate SBAPI violations into separate CU
+#define private public
+
 #include "lldb/API/LLDB.h"
 
 #include <map>
@@ -13,6 +16,11 @@
 
 /// Private LLDB APIs
 namespace lldb_private {
+
+class VariableList {
+public:
+    void Dump(Stream *s, bool show_context) const;
+};
 
 class CompileUnit {
 public:
@@ -45,6 +53,7 @@ extern "C" {
 
 IFUNC(_ZN12lldb_private11CompileUnit11GetLanguageEv);
 IFUNC(_ZN12lldb_private11CompileUnit15GetVariableListEb);
+IFUNC(_ZNK12lldb_private12VariableList4DumpEPNS_6StreamEb);
 
 }
 
@@ -62,6 +71,13 @@ auto& Store(const char* id) {
         slot = new std::any(T());
     }
     return *std::any_cast<T>(slot);
+}
+
+template<typename T>
+void Desc(T& value) {
+    lldb::SBStream stream;
+    value.GetDescription(stream);
+    ImGui::Text("%.*s", int(stream.GetSize()), stream.GetData());
 }
 
 void DrawModules(lldb::SBTarget& target) {
@@ -230,6 +246,58 @@ void DrawModules(lldb::SBTarget& target) {
     EndTable();
 }
 
+void DrawCompileUnits(lldb::SBTarget& target) {
+    using namespace ImGui;
+
+    for (uint32_t i = 0; i < target.GetNumModules(); i++) {
+        auto mod = target.GetModuleAtIndex(i);
+
+        PathTree<lldb::SBCompileUnit> tree;
+        bool anyValid = false;
+
+        for (uint32_t j = 0; j < mod.GetNumCompileUnits(); j++) {
+            auto cu = mod.GetCompileUnitAtIndex(j);
+            if (!cu.IsValid()) {
+                continue;
+            }
+
+            anyValid = true;
+            tree.Put(cu.GetFileSpec()).value = std::move(cu);
+        }
+
+        if (!anyValid) {
+            continue;
+        }
+
+        SeparatorText(mod.GetFileSpec().GetFilename());
+        PushID(i);
+
+        const auto treeNode = [=](auto&, const std::string& stem, PathTree<lldb::SBCompileUnit>& node) {
+            if (!node.value) {
+                return TreeNode(stem.c_str());
+            }
+
+            if (TreeNode(stem.c_str())) {
+                lldb::SBCompileUnit& cu = *node.value;
+
+                if (auto ptr = cu.m_opaque_ptr->GetVariableList(true)) {
+                    lldb::SBStream stream;
+                    ptr->Dump(stream.m_opaque_up.get(), false);
+
+                    Text("%.*s", int(stream.GetSize()), stream.GetData());
+                }
+
+                TreePop();
+            }
+
+            return false;
+        };
+        tree.Traverse(treeNode, TreePop);
+
+        PopID();
+    }
+}
+
 bool CollapsingHeader2(const char* label, ImGuiTreeNodeFlags flags = 0) {
     struct Scope {
         Scope() :padding(ImGui::GetCurrentWindow()->WindowPadding.x) {
@@ -368,7 +436,7 @@ API void Draw(lldb::SBDebugger& debugger) {
     char buffer[128];
     snprintf(buffer, sizeof(buffer), "Debugger %llu###SBDebugger(%llu)", debugger.GetID(), debugger.GetID());
 
-    SetNextWindowSize(ImVec2(1200, 750), ImGuiCond_Once);
+    SetNextWindowSize(ImVec2(1050, 600), ImGuiCond_Once);
 
     if (Begin(buffer, nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
         auto target = debugger.GetSelectedTarget();
@@ -387,6 +455,10 @@ API void Draw(lldb::SBDebugger& debugger) {
                 }
                 if (BeginTabItem("Modules")) {
                     DrawModules(target);
+                    EndTabItem();
+                }
+                if (BeginTabItem("CUs")) {
+                    DrawCompileUnits(target);
                     EndTabItem();
                 }
                 EndTabBar();
