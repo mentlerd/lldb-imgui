@@ -5,7 +5,6 @@
 
 #include <map>
 #include <string>
-#include <optional>
 #include <utility>
 
 namespace lldb::imgui {
@@ -14,7 +13,7 @@ namespace lldb::imgui {
 template<typename T>
 class PathTree {
 public:
-    std::optional<T> value;
+    T value;
 
     PathTree() = default;
 

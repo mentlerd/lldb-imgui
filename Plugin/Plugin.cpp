@@ -8,6 +8,7 @@
 
 // TODO: Separate SBAPI violations into separate CU
 #define private public
+#define protected public
 
 #include "lldb/API/LLDB.h"
 
@@ -17,12 +18,47 @@
 /// Private LLDB APIs
 namespace lldb_private {
 
-class VariableList {
+class ExecutionContextScope {
+    ExecutionContextScope() = delete;
+};
+
+class Target {
+    Target() = delete;
+
 public:
-    void Dump(Stream *s, bool show_context) const;
+    auto ToCtx() {
+        return reinterpret_cast<ExecutionContextScope*>(uintptr_t(this) + 0x240);
+    }
+};
+
+class Process {
+    Process() = delete;
+
+public:
+    auto ToCtx() {
+        return reinterpret_cast<ExecutionContextScope*>(uintptr_t(this) + 0x78);
+    }
+};
+
+class ValueObjectVariable {
+    ValueObjectVariable() = delete;
+
+public:
+    static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope, const lldb::VariableSP &var_sp);
+};
+
+class VariableList {
+    VariableList() = delete;
+
+public:
+    size_t GetSize() const;
+
+    lldb::VariableSP GetVariableAtIndex(size_t idx) const;
 };
 
 class CompileUnit {
+    CompileUnit() = delete;
+
 public:
     lldb::LanguageType GetLanguage();
 
@@ -53,7 +89,10 @@ extern "C" {
 
 IFUNC(_ZN12lldb_private11CompileUnit11GetLanguageEv);
 IFUNC(_ZN12lldb_private11CompileUnit15GetVariableListEb);
+IFUNC(_ZN12lldb_private19ValueObjectVariable6CreateEPNS_21ExecutionContextScopeERKNSt3__110shared_ptrINS_8VariableEEE);
+IFUNC(_ZNK12lldb_private12VariableList18GetVariableAtIndexEm);
 IFUNC(_ZNK12lldb_private12VariableList4DumpEPNS_6StreamEb);
+IFUNC(_ZNK12lldb_private12VariableList7GetSizeEv);
 
 }
 
@@ -145,12 +184,14 @@ void DrawModules(lldb::SBTarget& target) {
 
     // Render table entries
     const auto treeNode = [=](const std::string& path, const std::string& stem, PathTree<lldb::SBModule>& node) {
+        auto& mod = node.value;
+
         TableNextRow();
         TableNextColumn();
 
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAllColumns;
 
-        if (node.value) {
+        if (mod) {
             flags |= ImGuiTreeNodeFlags_Leaf;
         } else {
             flags |= ImGuiTreeNodeFlags_LabelSpanAllColumns;
@@ -174,10 +215,9 @@ void DrawModules(lldb::SBTarget& target) {
             EndPopup();
         }
 
-        if (!node.value) {
+        if (!mod) {
             return isOpen;
         }
-        auto& mod = *node.value;
 
         if (TableNextColumn()) {
             uint32_t versions[3];
@@ -272,20 +312,54 @@ void DrawCompileUnits(lldb::SBTarget& target) {
         SeparatorText(mod.GetFileSpec().GetFilename());
         PushID(i);
 
-        const auto treeNode = [=](auto&, const std::string& stem, PathTree<lldb::SBCompileUnit>& node) {
-            if (!node.value) {
+        const auto treeNode = [&](auto&, const std::string& stem, PathTree<lldb::SBCompileUnit>& node) {
+            SBCompileUnit& cu = node.value;
+
+            if (!cu) {
                 return TreeNode(stem.c_str());
             }
 
             if (TreeNode(stem.c_str())) {
-                lldb::SBCompileUnit& cu = *node.value;
+                auto* exe_ctx = target.GetSP()->ToCtx();
 
-                if (auto ptr = cu.m_opaque_ptr->GetVariableList(true)) {
-                    lldb::SBStream stream;
-                    ptr->Dump(stream.m_opaque_up.get(), false);
-
-                    Text("%.*s", int(stream.GetSize()), stream.GetData());
+                if (auto proc = target.GetProcess()) {
+                    exe_ctx = proc.GetSP()->ToCtx();
                 }
+
+                PathTree<std::vector<SBValue>> tree;
+
+                if (auto list = cu.m_opaque_ptr->GetVariableList(true)) {
+                    for (size_t i = 0; i < list->GetSize(); i++) {
+                        auto var = list->GetVariableAtIndex(i);
+                        if (!var) {
+                            continue;
+                        }
+                        
+                        auto valobj = lldb_private::ValueObjectVariable::Create(exe_ctx, var);
+                        if (!valobj) {
+                            continue;
+                        }
+
+                        SBValue value(valobj);
+
+                        tree.Put(value.GetDeclaration().GetFileSpec()).value.push_back(value);
+                    }
+                }
+
+                const auto treeNode = [&](auto&, const std::string& stem, auto& node) {
+                    if (!TreeNode(stem.c_str())) {
+                        return false;
+                    }
+
+                    for (SBValue& value : node.value) {
+                        SBStream stream;
+                        value.GetDescription(stream);
+
+                        Text("%.*s", int(stream.GetSize()), stream.GetData());
+                    }
+                    return true;
+                };
+                tree.Traverse(treeNode, TreePop);
 
                 TreePop();
             }

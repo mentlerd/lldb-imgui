@@ -7,6 +7,8 @@
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
 
+static std::string g_static = "Hello!";
+
 std::filesystem::path GetExecutablePath() {
     uint32_t capacity = 0;
     _NSGetExecutablePath(nullptr, &capacity);
@@ -31,5 +33,5 @@ int main(int argc, const char* argv[]) {
     }
 
     __builtin_debugtrap();
-    return 0;
+    return (int) g_static.size();
 }
