@@ -268,7 +268,10 @@ void ReloadPlugin() {
         return;
     }
 
-    auto pluginPath = std::filesystem::path(info.dli_fname).replace_filename("libPlugin.dylib");
+    auto hostPath = std::filesystem::path(info.dli_fname);
+
+    // TODO: This is specific to building with Xcode
+    auto pluginPath = hostPath.parent_path().parent_path().parent_path() / "Plugin/Debug/libPlugin.dylib";
 
     Log("Trying to load plugin from '{}'", pluginPath.c_str());
     g_plugin = dlopen(pluginPath.c_str(), RTLD_LOCAL | RTLD_NOW);
