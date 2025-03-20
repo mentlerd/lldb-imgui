@@ -286,6 +286,111 @@ void DrawModules(lldb::SBTarget& target) {
     EndTable();
 }
 
+void DrawFunc(lldb::SBFunction& func, lldb::SBTarget& target) {
+    using namespace ImGui;
+
+    if (CollapsingHeader("Blocks")) {
+        std::function<void(SBBlock)> drawBlocks = [&](SBBlock start) {
+            char buffer[128];
+
+            uint32_t index = 0;
+            for (auto block = start; block; block = block.GetSibling()) {
+                snprintf(buffer, sizeof(buffer), "Block###%d", index++);
+
+                auto child = block.GetFirstChild();
+
+                ImGuiTreeNodeFlags flags = 0;
+
+                if (!child) {
+                    flags |= ImGuiTreeNodeFlags_Leaf;
+                }
+
+                if (TreeNodeEx(buffer, 0, "Block %s", block.GetInlinedName() ? "(inlined)" : "")) {
+                    for (uint32_t i = 0; i < block.GetNumRanges(); i++) {
+                        TextDisabled("[%llx-%llx)",
+                                     block.GetRangeStartAddress(i).GetFileAddress(),
+                                     block.GetRangeEndAddress(i).GetFileAddress());
+                    }
+
+                    for (auto i = 0; i < 3; i++) {
+                        static const char* kLabel[3] = {
+                            "arg", "local", "static"
+                        };
+                        auto vars = block.GetVariables(target, i == 0, i == 1, i == 2);
+
+                        for (uint32_t j = 0; j < vars.GetSize(); j++) {
+                            auto var = vars.GetValueAtIndex(j);
+
+                            BulletText("%s", kLabel[i]);
+
+                            SameLine();
+                            Text("%s", var.GetName());
+
+                            SameLine();
+                            TextDisabled("%s", var.GetDisplayTypeName());
+                        }
+                    }
+
+                    if (child) {
+                        drawBlocks(child);
+                    }
+                    TreePop();
+                }
+            }
+        };
+        drawBlocks(func.GetBlock());
+    }
+
+    if (CollapsingHeader("Instructions")) {
+        if (auto list = func.GetInstructions(target)) {
+            SBLineEntry currLine;
+
+            for (uint32_t i = 0; i < list.GetSize(); i++) {
+                auto inst = list.GetInstructionAtIndex(i);
+
+                if (auto line = inst.GetAddress().GetLineEntry()) {
+                    if (currLine != line) {
+                        currLine = line;
+
+                        lldb::SBStream stream;
+                        currLine.GetDescription(stream);
+
+                        char buffer[256];
+                        snprintf(buffer, sizeof(buffer), "%.*s", int(stream.GetSize()), stream.GetData());
+
+                        SeparatorText(buffer);
+                    }
+                } else {
+                    SameLine();
+                    TextDisabled("No LineEntry");
+                }
+
+                Desc(inst);
+
+                if (inst.DoesBranch()) {
+                    SameLine();
+
+                    addr_t rawAddr;
+                    if (std::sscanf(inst.GetOperands(target), "%llx", &rawAddr) != 1) {
+                        TextDisabled("(unknown branch)");
+                    } else {
+                        if (auto addr = target.ResolveFileAddress(rawAddr)) {
+                            if (addr.GetFunction() == func) {
+                                TextDisabled("(inner branch)");
+                            } else {
+                                SameLine();
+                                Text("// %s", addr.GetFunction().GetDisplayName());
+                            }
+                        } else {
+                            TextDisabled("(invalid branch)");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 void DrawCompileUnits(lldb::SBTarget& target) {
     using namespace ImGui;
 
@@ -311,6 +416,14 @@ void DrawCompileUnits(lldb::SBTarget& target) {
 
         SeparatorText(mod.GetFileSpec().GetFilename());
         PushID(i);
+
+        if (auto list = mod.FindFunctions("main")) {
+            for (uint32_t i = 0; i < list.GetSize(); i++) {
+                auto func = list.GetContextAtIndex(i).GetFunction();
+
+                DrawFunc(func, target);
+            }
+        }
 
         const auto treeNode = [&](auto&, const std::string& stem, PathTree<lldb::SBCompileUnit>& node) {
             SBCompileUnit& cu = node.value;
