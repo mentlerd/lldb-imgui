@@ -4,6 +4,11 @@
 
 static std::string g_static = "Hello!";
 
+auto& GetGreeting() {
+    static std::string f_static = "Hello!";
+    return f_static;
+}
+
 int main(int argc, const char* argv[]) {
     // Create some stack variables for inspecting
     std::unordered_map<int, std::unordered_map<int, std::string>> maps;

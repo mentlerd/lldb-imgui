@@ -12,8 +12,30 @@
 
 #include "lldb/API/LLDB.h"
 
+#include "llvm/ADT/STLFunctionalExtras.h"
+
 #include <map>
 #include <any>
+
+/// Forbidden magic for linking to private LLDB symbols - https://maskray.me/blog/2021-01-18-gnu-indirect-function
+///
+/// Annoyingly the `NAME_resolver()` functions keep getting generated in a way that clobbers x8, which
+/// is used for return value optimization in C++ ...
+///
+/// To not ruin the call, `x8` is saved in `x16` which is specified to be clobberable across call boundaries
+/// https://developer.arm.com/documentation/102374/0102/Procedure-Call-Standard
+#define IFUNC(NAME)                                                    \
+    extern "C" {                                                       \
+        void* NAME##_addr = lldb::imgui::ResolvePrivateSymbol(#NAME);  \
+        void* NAME##_resolver() {                                      \
+            __asm__ volatile("mov x16,x8");                            \
+            auto tmp = NAME##_addr;                                    \
+            __asm__ volatile("mov x8,x16");                            \
+            return tmp;                                                \
+        }                                                              \
+        __attribute__((ifunc(#NAME "_resolver")))                      \
+        void NAME();                                                   \
+    }
 
 /// Private LLDB APIs
 namespace lldb_private {
@@ -46,6 +68,7 @@ class ValueObjectVariable {
 public:
     static lldb::ValueObjectSP Create(ExecutionContextScope *exe_scope, const lldb::VariableSP &var_sp);
 };
+IFUNC(_ZN12lldb_private19ValueObjectVariable6CreateEPNS_21ExecutionContextScopeERKNSt3__110shared_ptrINS_8VariableEEE);
 
 class VariableList {
     VariableList() = delete;
@@ -55,6 +78,8 @@ public:
 
     lldb::VariableSP GetVariableAtIndex(size_t idx) const;
 };
+IFUNC(_ZNK12lldb_private12VariableList18GetVariableAtIndexEm);
+IFUNC(_ZNK12lldb_private12VariableList7GetSizeEv);
 
 class CompileUnit {
     CompileUnit() = delete;
@@ -63,38 +88,15 @@ public:
     lldb::LanguageType GetLanguage();
 
     lldb::VariableListSP GetVariableList(bool);
+
+    lldb::FunctionSP FindFunction(llvm::function_ref<bool(const lldb::FunctionSP&)> predicate);
 };
-
-};
-
-/// Forbidden magic for linking to private LLDB symbols - https://maskray.me/blog/2021-01-18-gnu-indirect-function
-///
-/// Annoyingly the `NAME_resolver()` functions keep getting generated in a way that clobbers x8, which
-/// is used for return value optimization in C++ ...
-///
-/// To not ruin the call, `x8` is saved in `x16` which is specified to be clobberable across call boundaries
-/// https://developer.arm.com/documentation/102374/0102/Procedure-Call-Standard
-extern "C" {
-
-#define IFUNC(NAME)                                                \
-    void* NAME##_addr = lldb::imgui::ResolvePrivateSymbol(#NAME);  \
-    void* NAME##_resolver() {                                      \
-        __asm__ volatile("mov x16,x8");                            \
-        auto tmp = NAME##_addr;                                    \
-        __asm__ volatile("mov x8,x16");                            \
-        return tmp;                                                \
-    }                                                              \
-    __attribute__((ifunc(#NAME "_resolver")))                      \
-    void NAME();
-
 IFUNC(_ZN12lldb_private11CompileUnit11GetLanguageEv);
 IFUNC(_ZN12lldb_private11CompileUnit15GetVariableListEb);
-IFUNC(_ZN12lldb_private19ValueObjectVariable6CreateEPNS_21ExecutionContextScopeERKNSt3__110shared_ptrINS_8VariableEEE);
-IFUNC(_ZNK12lldb_private12VariableList18GetVariableAtIndexEm);
-IFUNC(_ZNK12lldb_private12VariableList4DumpEPNS_6StreamEb);
-IFUNC(_ZNK12lldb_private12VariableList7GetSizeEv);
+IFUNC(_ZN12lldb_private11CompileUnit12FindFunctionEN4llvm12function_refIFbRKNSt3__110shared_ptrINS_8FunctionEEEEEE)
 
-}
+};
+
 
 namespace lldb::imgui {
 
@@ -113,7 +115,7 @@ auto& Store(const char* id) {
 }
 
 template<typename T>
-void Desc(T& value) {
+void Desc(T&& value) {
     lldb::SBStream stream;
     value.GetDescription(stream);
     ImGui::Text("%.*s", int(stream.GetSize()), stream.GetData());
@@ -417,14 +419,6 @@ void DrawCompileUnits(lldb::SBTarget& target) {
         SeparatorText(mod.GetFileSpec().GetFilename());
         PushID(i);
 
-        if (auto list = mod.FindFunctions("main")) {
-            for (uint32_t i = 0; i < list.GetSize(); i++) {
-                auto func = list.GetContextAtIndex(i).GetFunction();
-
-                DrawFunc(func, target);
-            }
-        }
-
         const auto treeNode = [&](auto&, const std::string& stem, PathTree<lldb::SBCompileUnit>& node) {
             SBCompileUnit& cu = node.value;
 
@@ -439,7 +433,11 @@ void DrawCompileUnits(lldb::SBTarget& target) {
                     exe_ctx = proc.GetSP()->ToCtx();
                 }
 
-                PathTree<std::vector<SBValue>> tree;
+                struct Data {
+                    std::vector<SBValue> globals;
+                    std::vector<std::pair<SBFunction, std::vector<SBValue>>> functions;
+                };
+                PathTree<Data> tree;
 
                 if (auto list = cu.m_opaque_ptr->GetVariableList(true)) {
                     for (size_t i = 0; i < list->GetSize(); i++) {
@@ -455,20 +453,61 @@ void DrawCompileUnits(lldb::SBTarget& target) {
 
                         SBValue value(valobj);
 
-                        tree.Put(value.GetDeclaration().GetFileSpec()).value.push_back(value);
+                        if (auto spec = value.GetDeclaration().GetFileSpec()) {
+                            tree.Put(spec).value.globals.push_back(value);
+                        }
                     }
                 }
+
+                cu.m_opaque_ptr->FindFunction([&](const lldb::FunctionSP& ptr) mutable {
+                    SBFunction func(ptr.get());
+
+                    if (auto spec = func.GetStartAddress().GetLineEntry().GetFileSpec()) {
+                        std::vector<SBValue> globals;
+
+                        std::function<void(SBBlock)> visit = [&](SBBlock start) {
+                            for (auto block = start; block.IsValid(); block = block.GetSibling()) {
+                                auto vars = block.GetVariables(target, false, false, true);
+                                for (auto i = 0; i < vars.GetSize(); i++) {
+                                    globals.push_back(vars.GetValueAtIndex(i));
+                                }
+
+                                visit(block.GetFirstChild());
+                            }
+                        };
+                        visit(func.GetBlock());
+
+                        if (!globals.empty()) {
+                            tree.Put(spec).value.functions.emplace_back(func, globals);
+                        }
+                    }
+                    return false;
+                });
 
                 const auto treeNode = [&](auto&, const std::string& stem, auto& node) {
                     if (!TreeNode(stem.c_str())) {
                         return false;
                     }
 
-                    for (SBValue& value : node.value) {
-                        SBStream stream;
-                        value.GetDescription(stream);
-
-                        Text("%.*s", int(stream.GetSize()), stream.GetData());
+                    if (!node.value.globals.empty()) {
+                        if (TreeNodeEx("globals", ImGuiTreeNodeFlags_Bullet, "(globals)")) {
+                            for (SBValue& value : node.value.globals) {
+                                Desc(value);
+                                SameLine();
+                                Desc(value.GetAddress().GetSymbol());
+                            }
+                            TreePop();
+                        }
+                    }
+                    for (auto& [func, globals] : node.value.functions) {
+                        if (TreeNodeEx(func.GetMangledName(), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
+                            for (SBValue& value : globals) {
+                                Desc(value);
+                                SameLine();
+                                Desc(value.GetAddress().GetSymbol());
+                            }
+                            TreePop();
+                        }
                     }
                     return true;
                 };
