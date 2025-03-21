@@ -1,5 +1,7 @@
 
+#include "Cache.h"
 #include "PathTree.h"
+
 #include "CocoaWrapper.h"
 #include "LLDB_Exposer.h"
 
@@ -58,8 +60,6 @@ SBValue Wrap(const lldb::ValueObjectSP& value) {
 }
 
 }
-
-
 
 /// Forbidden magic for linking to private LLDB symbols - https://maskray.me/blog/2021-01-18-gnu-indirect-function
 ///
@@ -437,6 +437,111 @@ void DrawFunc(lldb::SBFunction& func, lldb::SBTarget& target) {
     }
 }
 
+void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
+    struct Data {
+        std::vector<SBValue> globals;
+        std::vector<std::pair<SBFunction, std::vector<SBValue>>> functions;
+    };
+    using Tree = PathTree<Data>;
+
+    auto treeBuilder = [&](lldb_private::CompileUnit* cu) {
+        Tree tree;
+
+        lldb_private::ExecutionContextScope* exe_ctx = Unwrap(target)->ToCtx();
+
+        if (auto proc = target.GetProcess()) {
+            exe_ctx = Unwrap(proc).lock()->ToCtx();
+        }
+
+        if (auto list = cu->GetVariableList(true)) {
+            for (size_t i = 0; i < list->GetSize(); i++) {
+                auto var = list->GetVariableAtIndex(i);
+                if (!var) {
+                    continue;
+                }
+
+                auto valobj = lldb_private::ValueObjectVariable::Create(exe_ctx, var);
+                if (!valobj) {
+                    continue;
+                }
+
+                SBValue value = Wrap(valobj);
+
+                if (auto spec = value.GetDeclaration().GetFileSpec()) {
+                    tree.Put(spec).value.globals.push_back(value);
+                }
+            }
+        }
+
+        cu->FindFunction([&](const lldb::FunctionSP& ptr) mutable {
+            SBFunction func = Wrap(ptr.get());
+
+            auto spec = func.GetStartAddress().GetLineEntry().GetFileSpec();
+            if (!spec) {
+                return false;
+            }
+
+            std::vector<SBValue> globals;
+
+            std::function<void(SBBlock)> visit = [&](SBBlock start) {
+                for (auto block = start; block.IsValid(); block = block.GetSibling()) {
+                    auto vars = block.GetVariables(target, false, false, true);
+                    for (auto i = 0; i < vars.GetSize(); i++) {
+                        globals.push_back(vars.GetValueAtIndex(i));
+                    }
+
+                    visit(block.GetFirstChild());
+                }
+            };
+            visit(func.GetBlock());
+
+            if (!globals.empty()) {
+                tree.Put(spec).value.functions.emplace_back(func, globals);
+            }
+            return false;
+        });
+
+        return tree;
+    };
+
+    // Building a tree of statics takes a while, cache the data
+    static Cache<lldb_private::CompileUnit*, Tree> g_cache(__func__);
+
+    Tree& tree = g_cache.GetOrCreate(Unwrap(cu), treeBuilder);
+
+    // The rest is UI code
+    using namespace ImGui;
+
+    auto treeNode = [&](auto&, const std::string& stem, PathTree<Data>& node) {
+        if (!TreeNode(stem.c_str())) {
+            return false;
+        }
+
+        if (!node.value.globals.empty()) {
+            if (TreeNodeEx("globals", ImGuiTreeNodeFlags_Bullet, "(globals)")) {
+                for (SBValue& value : node.value.globals) {
+                    Desc(value);
+                    SameLine();
+                    Desc(value.GetAddress().GetSymbol());
+                }
+                TreePop();
+            }
+        }
+        for (auto& [func, globals] : node.value.functions) {
+            if (TreeNodeEx(func.GetMangledName(), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
+                for (SBValue& value : globals) {
+                    Desc(value);
+                    SameLine();
+                    Desc(value.GetAddress().GetSymbol());
+                }
+                TreePop();
+            }
+        }
+        return true;
+    };
+    tree.Traverse(treeNode, TreePop);
+}
+
 void DrawCompileUnits(lldb::SBTarget& target) {
     using namespace ImGui;
 
@@ -471,92 +576,7 @@ void DrawCompileUnits(lldb::SBTarget& target) {
             }
 
             if (TreeNode(stem.c_str())) {
-                auto* exe_ctx = Unwrap(target)->ToCtx();
-
-                if (auto proc = target.GetProcess()) {
-                    exe_ctx = Unwrap(proc).lock()->ToCtx();
-                }
-
-                struct Data {
-                    std::vector<SBValue> globals;
-                    std::vector<std::pair<SBFunction, std::vector<SBValue>>> functions;
-                };
-                PathTree<Data> tree;
-
-                if (auto list = Unwrap(cu)->GetVariableList(true)) {
-                    for (size_t i = 0; i < list->GetSize(); i++) {
-                        auto var = list->GetVariableAtIndex(i);
-                        if (!var) {
-                            continue;
-                        }
-                        
-                        auto valobj = lldb_private::ValueObjectVariable::Create(exe_ctx, var);
-                        if (!valobj) {
-                            continue;
-                        }
-
-                        SBValue value = Wrap(valobj);
-
-                        if (auto spec = value.GetDeclaration().GetFileSpec()) {
-                            tree.Put(spec).value.globals.push_back(value);
-                        }
-                    }
-                }
-
-                Unwrap(cu)->FindFunction([&](const lldb::FunctionSP& ptr) mutable {
-                    SBFunction func = Wrap(ptr.get());
-
-                    if (auto spec = func.GetStartAddress().GetLineEntry().GetFileSpec()) {
-                        std::vector<SBValue> globals;
-
-                        std::function<void(SBBlock)> visit = [&](SBBlock start) {
-                            for (auto block = start; block.IsValid(); block = block.GetSibling()) {
-                                auto vars = block.GetVariables(target, false, false, true);
-                                for (auto i = 0; i < vars.GetSize(); i++) {
-                                    globals.push_back(vars.GetValueAtIndex(i));
-                                }
-
-                                visit(block.GetFirstChild());
-                            }
-                        };
-                        visit(func.GetBlock());
-
-                        if (!globals.empty()) {
-                            tree.Put(spec).value.functions.emplace_back(func, globals);
-                        }
-                    }
-                    return false;
-                });
-
-                const auto treeNode = [&](auto&, const std::string& stem, auto& node) {
-                    if (!TreeNode(stem.c_str())) {
-                        return false;
-                    }
-
-                    if (!node.value.globals.empty()) {
-                        if (TreeNodeEx("globals", ImGuiTreeNodeFlags_Bullet, "(globals)")) {
-                            for (SBValue& value : node.value.globals) {
-                                Desc(value);
-                                SameLine();
-                                Desc(value.GetAddress().GetSymbol());
-                            }
-                            TreePop();
-                        }
-                    }
-                    for (auto& [func, globals] : node.value.functions) {
-                        if (TreeNodeEx(func.GetMangledName(), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
-                            for (SBValue& value : globals) {
-                                Desc(value);
-                                SameLine();
-                                Desc(value.GetAddress().GetSymbol());
-                            }
-                            TreePop();
-                        }
-                    }
-                    return true;
-                };
-                tree.Traverse(treeNode, TreePop);
-
+                DrawCompileUnitGlobals(target, cu);
                 TreePop();
             }
 
@@ -697,7 +717,7 @@ void DrawThreads(lldb::SBTarget target) {
 #define API __attribute__((used))
 
 API void Draw() {
-    // Nothing
+    CacheBase::Tick();
 }
 
 API void Draw(lldb::SBDebugger& debugger) {

@@ -3,7 +3,9 @@ set(target Plugin)
 find_package(llvm REQUIRED config LLVMSupport)
 
 add_library(${target} SHARED
+	src/Cache.h
 	src/PathTree.h
+
 	src/Plugin.cpp
 )
 
