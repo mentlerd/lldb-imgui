@@ -528,7 +528,7 @@ void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
             }
         }
         for (auto& [func, globals] : node.value.functions) {
-            if (TreeNodeEx(func.GetMangledName(), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
+            if (TreeNodeEx(Unwrap(func), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
                 for (SBValue& value : globals) {
                     Desc(value);
                     SameLine();
