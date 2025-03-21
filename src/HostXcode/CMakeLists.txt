@@ -4,6 +4,8 @@ add_library(${target} SHARED
 	include/CocoaWrapper.h
 	include/LLDB_Exposer.h
 	include/Logging.h
+	include/Registry.h
+	include/Debuggable.h
 
 	src/CocoaWrapper.mm
 	src/LLDB_Exposer.cpp

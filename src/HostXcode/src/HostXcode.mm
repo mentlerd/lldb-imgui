@@ -1,3 +1,4 @@
+#include "Debuggable.h"
 #include "MainThreadHijacker.h"
 #include "Logging.h"
 
@@ -17,6 +18,7 @@
 
 #include <map>
 #include <filesystem>
+#include <algorithm>
 
 @interface AppViewController : NSViewController<NSWindowDelegate>
 @end
@@ -287,43 +289,142 @@ void ReloadPlugin() {
     Log("Plugin loaded: {} {}", (void*) g_pluginDraw, (void*) g_pluginDrawDebugger);
 }
 
+namespace lldb::imgui {
+
+Registry<DebugWindow> g_debugWindows;
+
+template<>
+Registry<DebugWindow>& Registry<DebugWindow>::Default() {
+    return g_debugWindows;
+}
+
+struct Demo final : DebugWindow {
+    void Init(State& state) {
+        state.title = "ImGui Demo";
+        state.custom = true;
+    }
+    void Update(State& state) {
+        if (!state.isOpen) {
+            return;
+        }
+        ImGui::ShowDemoWindow(&state.isOpen);
+    }
+    void Draw() {
+        // Nothing
+    }
+} g_demo;
+
+struct Logs final : DebugWindow {
+    void Init(State& state) {
+        state.title = "Logs";
+    }
+    void Draw() {
+        std::scoped_lock lock(g_logMutex);
+
+        for (auto i = 0; i < 64; i++) {
+            auto size = g_log.size();
+
+            if (size <= i) {
+                break;
+            }
+            ImGui::Text("%s", g_log.at(size - i - 1).c_str());
+        }
+    }
+} g_logs;
+
+
+void DrawDebugWindows() {
+    static std::unordered_map<DebugWindow*, DebugWindow::State> s_states;
+
+    // Update window states
+    {
+        auto oldStates = std::exchange(s_states, {});
+
+        for (DebugWindow* window : g_debugWindows.View()) {
+            DebugWindow::State* state = nullptr;
+
+            auto node = oldStates.extract(window);
+            if (!node) {
+                // New window, initialize state
+                state = &s_states[window];
+                state->title = std::format("DebugWindow({:X})", reinterpret_cast<uintptr_t>(window));
+
+                window->Init(*state);
+            } else {
+                // Returning window, retain state
+                state = &s_states.insert(std::move(node)).position->second;
+            }
+
+            window->Update(*state);
+        }
+    }
+
+    // Draw windows
+    using namespace ImGui;
+
+    for (auto& [window, state] : s_states) {
+        if (state.custom) {
+            continue;
+        }
+        if (!state.isOpen) {
+            continue;
+        }
+
+        if (Begin(state.title.c_str(), &state.isOpen)) {
+            window->Draw();
+        }
+        End();
+    }
+
+    // Draw menu
+    if (BeginMainMenuBar()) {
+        if (BeginMenu("Debug")) {
+            // Draw debug windows in alphabetical order, break ties with pointer
+            struct Entry {
+                std::string_view title;
+
+                DebugWindow* window;
+                DebugWindow::State* state;
+
+                auto operator<=>(const Entry&) const = default;
+            };
+            std::vector<Entry> windowsToDraw;
+
+            for (auto& [window, state] : s_states) {
+                windowsToDraw.push_back(Entry{
+                    .title = state.title,
+                    .window = window,
+                    .state = &state,
+                });
+            }
+            std::sort(windowsToDraw.begin(), windowsToDraw.end());
+
+            for (Entry& entry : windowsToDraw) {
+                Checkbox(entry.state->title.c_str(), &entry.state->isOpen);
+            }
+            EndMenu();
+        }
+        EndMainMenuBar();
+    }
+}
+
+}
+
+
+
 std::mutex g_debuggersMutex;
 std::map<lldb::user_id_t, lldb::SBDebugger> g_debuggers;
 
 void DrawFrame() {
     ImGui::NewFrame();
 
-    static bool s_showDemo = false;
     static bool s_showLogs = false;
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::Button("Reload plugin")) {
             ReloadPlugin();
         }
-
-        ImGui::Checkbox("Show demo", &s_showDemo);
-        ImGui::Checkbox("Show logs", &s_showLogs);
         ImGui::EndMainMenuBar();
-    }
-    if (s_showDemo) {
-        ImGui::ShowDemoWindow(&s_showDemo);
-    }
-    if (s_showLogs) {
-        if (ImGui::Begin("Logs", &s_showLogs)) {
-            using namespace lldb::imgui;
-
-            std::scoped_lock lock(g_logMutex);
-
-            for (auto i = 0; i < 64; i++) {
-                auto size = g_log.size();
-
-                if (size <= i) {
-                    break;
-                }
-                ImGui::Text("%s", g_log.at(size - i - 1).c_str());
-            }
-        }
-        ImGui::End();
     }
 
     {
@@ -349,6 +450,8 @@ void DrawFrame() {
     if (g_pluginDraw) {
         g_pluginDraw();
     }
+
+    lldb::imgui::DrawDebugWindows();
 
     ImGui::EndFrame();
     ImGui::Render();
