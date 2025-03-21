@@ -6,16 +6,60 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
-// TODO: Separate SBAPI violations into separate CU
-#define private public
-#define protected public
-
 #include "lldb/API/LLDB.h"
 
 #include "llvm/ADT/STLFunctionalExtras.h"
 
 #include <map>
 #include <any>
+
+namespace lldb::imgui {
+
+/// SB API objects are a thin ABI stable wrapper around pointers to LLDB implementation details. This
+/// trick allows access to the underlying pointer for further shenanigans
+#define UNWRAP(API, IMPL)                          \
+    static_assert(alignof(API) == alignof(IMPL));  \
+    static_assert(sizeof(API) == sizeof(IMPL));    \
+                                                   \
+    IMPL Unwrap(API value) {                       \
+        return reinterpret_cast<IMPL&>(value);     \
+    }                                              \
+    API Wrap(IMPL value) {                         \
+        return reinterpret_cast<API&>(value);      \
+    }
+
+UNWRAP(SBDebugger, DebuggerSP);
+UNWRAP(SBTarget, TargetSP);
+UNWRAP(SBProcess, ProcessWP);
+UNWRAP(SBCompileUnit, lldb_private::CompileUnit*);
+UNWRAP(SBFunction, lldb_private::Function*);
+
+/// SBValue is a little different, the implementation contains some additional fields, but luckily they provide
+/// protected varsions of getters/setters. We can abuse that to build our wrap/unwrap primitives
+class SBValueUnwrapper final : public SBValue {
+public:
+    SBValueUnwrapper() = delete;
+
+    static lldb::ValueObjectSP Unwrap(const SBValue& value) {
+        return reinterpret_cast<const SBValueUnwrapper&>(value).GetSP();
+    }
+    static SBValue Wrap(const lldb::ValueObjectSP& value) {
+        SBValue result;
+        reinterpret_cast<SBValueUnwrapper&>(result).SetSP(value);
+        return result;
+    }
+};
+
+lldb::ValueObjectSP Unwrap(SBValue value) {
+    return SBValueUnwrapper::Unwrap(value);
+}
+SBValue Wrap(const lldb::ValueObjectSP& value) {
+    return SBValueUnwrapper::Wrap(value);
+}
+
+}
+
+
 
 /// Forbidden magic for linking to private LLDB symbols - https://maskray.me/blog/2021-01-18-gnu-indirect-function
 ///
@@ -427,10 +471,10 @@ void DrawCompileUnits(lldb::SBTarget& target) {
             }
 
             if (TreeNode(stem.c_str())) {
-                auto* exe_ctx = target.GetSP()->ToCtx();
+                auto* exe_ctx = Unwrap(target)->ToCtx();
 
                 if (auto proc = target.GetProcess()) {
-                    exe_ctx = proc.GetSP()->ToCtx();
+                    exe_ctx = Unwrap(proc).lock()->ToCtx();
                 }
 
                 struct Data {
@@ -439,7 +483,7 @@ void DrawCompileUnits(lldb::SBTarget& target) {
                 };
                 PathTree<Data> tree;
 
-                if (auto list = cu.m_opaque_ptr->GetVariableList(true)) {
+                if (auto list = Unwrap(cu)->GetVariableList(true)) {
                     for (size_t i = 0; i < list->GetSize(); i++) {
                         auto var = list->GetVariableAtIndex(i);
                         if (!var) {
@@ -451,7 +495,7 @@ void DrawCompileUnits(lldb::SBTarget& target) {
                             continue;
                         }
 
-                        SBValue value(valobj);
+                        SBValue value = Wrap(valobj);
 
                         if (auto spec = value.GetDeclaration().GetFileSpec()) {
                             tree.Put(spec).value.globals.push_back(value);
@@ -459,8 +503,8 @@ void DrawCompileUnits(lldb::SBTarget& target) {
                     }
                 }
 
-                cu.m_opaque_ptr->FindFunction([&](const lldb::FunctionSP& ptr) mutable {
-                    SBFunction func(ptr.get());
+                Unwrap(cu)->FindFunction([&](const lldb::FunctionSP& ptr) mutable {
+                    SBFunction func = Wrap(ptr.get());
 
                     if (auto spec = func.GetStartAddress().GetLineEntry().GetFileSpec()) {
                         std::vector<SBValue> globals;
