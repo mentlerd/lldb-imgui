@@ -1,4 +1,5 @@
 #include "Debuggable.h"
+#include "Functional.h"
 
 #include "imgui.h"
 
@@ -60,7 +61,7 @@ public:
         g_caches.erase(this);
     }
 
-    V& GetOrCreate(const K& key, llvm::function_ref<V(K)> builder) {
+    V& GetOrCreate(const K& key, FuncRef<V(CView<K>)> builder) {
         Entry& entry = _contents[key];
 
         if (entry.expiresAt == 0) {

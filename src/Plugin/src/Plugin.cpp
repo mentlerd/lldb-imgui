@@ -321,17 +321,16 @@ void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
         ForEachVariable(cu, target, [&](SBValue value) {
             auto spec = value.GetDeclaration().GetFileSpec();
             if (!spec) {
-                return false;
+                return;
             }
 
             tree.Put(spec).value.globals.push_back(value);
-            return false;
         });
 
         ForEachFunction(cu, [&](SBFunction func) {
             auto spec = func.GetStartAddress().GetLineEntry().GetFileSpec();
             if (!spec) {
-                return false;
+                return;
             }
 
             std::vector<SBValue> globals;
@@ -351,7 +350,6 @@ void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
             if (!globals.empty()) {
                 tree.Put(spec).value.functions.emplace_back(func, globals);
             }
-            return false;
         });
 
         return tree;

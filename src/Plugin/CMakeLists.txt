@@ -4,6 +4,7 @@ find_package(llvm REQUIRED config LLVMSupport)
 
 add_library(${target} SHARED
 	src/Cache.h
+	src/Functional.h
 	src/PathTree.h
 
 	src/LLDB_Private.h
