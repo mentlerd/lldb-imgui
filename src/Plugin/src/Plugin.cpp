@@ -8,9 +8,18 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 
+#include "clang/AST/Decl.h"
+
 #include "lldb/API/LLDB.h"
 
+#include "lldb/Core/RichManglingContext.h"
+#include "lldb/Symbol/Function.h"
+#include "lldb/Symbol/Type.h"
+
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/DenseMap.h"
+
+#include "llvm/Support/Casting.h"
 
 #include <map>
 #include <any>
@@ -57,6 +66,19 @@ lldb::ValueObjectSP Unwrap(SBValue value) {
 }
 SBValue Wrap(const lldb::ValueObjectSP& value) {
     return SBValueUnwrapper::Wrap(value);
+}
+
+class SBTypeUnwrapper final : public SBType {
+public:
+    using SBType::SBType;
+
+    static SBType Wrap(lldb_private::CompilerType value) {
+        return SBTypeUnwrapper(value);
+    }
+};
+
+SBType Wrap(lldb_private::CompilerType value) {
+    return SBTypeUnwrapper::Wrap(value);
 }
 
 }
@@ -139,6 +161,30 @@ IFUNC(_ZN12lldb_private11CompileUnit11GetLanguageEv);
 IFUNC(_ZN12lldb_private11CompileUnit15GetVariableListEb);
 IFUNC(_ZN12lldb_private11CompileUnit12FindFunctionEN4llvm12function_refIFbRKNSt3__110shared_ptrINS_8FunctionEEEEEE)
 
+class Function;
+IFUNC(_ZN12lldb_private8Function14GetDeclContextEv);
+
+class Mangled;
+IFUNC(_ZN12lldb_private7Mangled19GetRichManglingInfoERNS_19RichManglingContextEPFbN4llvm9StringRefENS0_14ManglingSchemeEE);
+
+class RichManglingContext;
+IFUNC(_ZN12lldb_private19RichManglingContextD1Ev);
+IFUNC(_ZN12lldb_private19RichManglingContext21ParseFunctionBaseNameEv);
+
+class CompilerType;
+IFUNC(_ZNK12lldb_private12CompilerType18GetDisplayTypeNameEv);
+
+IFUNC(_ZN5clang4Decl19castFromDeclContextEPKNS_11DeclContextE);
+IFUNC(_ZNK12lldb_private12CompilerDecl7GetTypeEv);
+
+class TypeSystemClang {
+public:
+    CompilerType GetTypeForDecl(void *opaque_decl);
+};
+IFUNC(_ZN12lldb_private15TypeSystemClang14GetTypeForDeclEPv);
+IFUNC(_ZNK12lldb_private12CompilerDecl14GetDeclContextEv);
+IFUNC(_ZNK5clang4Decl15getDeclKindNameEv);
+
 };
 
 
@@ -158,10 +204,10 @@ auto& Store(const char* id) {
     return *std::any_cast<T>(slot);
 }
 
-template<typename T>
-void Desc(T&& value) {
+template<typename T, typename... Args>
+void Desc(T&& value, Args&&... args) {
     lldb::SBStream stream;
-    value.GetDescription(stream);
+    value.GetDescription(stream, std::forward<Args>(args)...);
     ImGui::Text("%.*s", int(stream.GetSize()), stream.GetData());
 }
 
@@ -604,7 +650,7 @@ bool CollapsingHeader2(const char* label, ImGuiTreeNodeFlags flags = 0) {
     return ImGui::CollapsingHeader(label, flags);
 }
 
-void Draw(lldb::SBFrame frame) {
+void DrawFrame(lldb::SBFrame frame) {
     using namespace ImGui;
 
     char buffer[128];
@@ -647,12 +693,60 @@ void Draw(lldb::SBFrame frame) {
 
     if (isOpen) {
         TreePush((void*) uint64_t(frame.GetFrameID()));
-        Text("Dummy");
+
+        if (auto* func = Unwrap(frame.GetFunction())) {
+            lldb_private::RichManglingContext ctx;
+
+            if (const_cast<lldb_private::Mangled&>(func->GetMangled()).GetRichManglingInfo(ctx, nullptr)) {
+                func->CalculateSymbolContextFunction();
+
+                auto sref = ctx.ParseFunctionBaseName();
+
+                std::string data(sref.data(), sref.size());
+                Text("BaseName: %s", data.c_str());
+            }
+            {
+                lldb_private::CompilerDeclContext ctx = func->GetDeclContext();
+
+                auto* typeSystemRaw = ctx.GetTypeSystem();
+                auto* typeSystemClang = reinterpret_cast<lldb_private::TypeSystemClang*>(typeSystemRaw);
+
+                SBType clazz;
+
+                for (auto i = 0; i < 3; i++) {
+                    auto* ctxClang = reinterpret_cast<clang::DeclContext*>(ctx.GetOpaqueDeclContext());
+
+                    auto decl = clang::dyn_cast_or_null<clang::Decl>(ctxClang);
+                    if (!decl) {
+                        break;
+                    }
+
+                    clazz = Wrap(typeSystemClang->GetTypeForDecl(decl));
+                    if (clazz.IsValid()) {
+                        break;
+                    }
+
+                    ctx = lldb_private::CompilerDecl(typeSystemRaw, decl).GetDeclContext();
+                }
+
+                Text("Class: %s", clazz.GetDisplayTypeName());
+            }
+
+            auto vars = frame.GetFunction().GetBlock().GetVariables(frame, true, false, false, lldb::eNoDynamicValues);
+            for (auto i = 0; i < vars.GetSize(); i++) {
+                BulletText("%d: ", i);
+                SameLine();
+                Desc(vars.GetValueAtIndex(i));
+            }
+        } else {
+            TextDisabled("No func");
+        }
+
         TreePop();
     }
 }
 
-void Draw(lldb::SBThread thread) {
+void DrawThread(lldb::SBThread thread) {
     using namespace ImGui;
 
     char buffer[128];
@@ -694,7 +788,7 @@ void Draw(lldb::SBThread thread) {
     if (isOpen) {
         TreePush((void*) thread.GetThreadID());
         for (uint32_t f = 0; f < thread.GetNumFrames(); f++) {
-            Draw(thread.GetFrameAtIndex(f));
+            DrawFrame(thread.GetFrameAtIndex(f));
         }
         TreePop();
     }
@@ -708,7 +802,7 @@ void DrawThreads(lldb::SBTarget target) {
     }
 
     for (uint32_t i = 0; i < proc.GetNumThreads(); i++) {
-        Draw(proc.GetThreadAtIndex(i));
+        DrawThread(proc.GetThreadAtIndex(i));
     }
 }
 
