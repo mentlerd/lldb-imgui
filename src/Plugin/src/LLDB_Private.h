@@ -17,4 +17,7 @@ void ForEachFunction(SBCompileUnit cu, Visitor<SBFunction> visitor);
 std::string GetFunctionBaseName(SBFunction func);
 SBType GetClassOfMemberFunction(SBFunction func);
 
+/// This API does not allocate into the constant string pool unlike the SBAPI version
+std::string GetValueAsString(SBValue value);
+
 }

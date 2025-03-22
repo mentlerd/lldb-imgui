@@ -45,6 +45,12 @@ ExecutionContextScope* ToExeScope(Process* ptr) {
     return reinterpret_cast<ExecutionContextScope*>(uintptr_t(ptr) + 0x78);
 }
 
+class ValueObject {
+public:
+    bool GetValueAsCString(lldb::Format format, std::string& destination);
+};
+IFUNC(_ZN12lldb_private11ValueObject17GetValueAsCStringEN4lldb6FormatERNSt3__112basic_stringIcNS3_11char_traitsIcEENS3_9allocatorIcEEEE);
+
 class ValueObjectVariable {
 public:
     /// Bringing in `ValueObjectVariable.h` would require additional symbols, redeclare the needed function instead
@@ -236,6 +242,12 @@ SBType GetClassOfMemberFunction(SBFunction func) {
     }
 
     return SBType();
+}
+
+std::string GetValueAsString(SBValue value) {
+    std::string buffer;
+    Unwrap(value)->GetValueAsCString(value.GetFormat(), buffer);
+    return buffer;
 }
 
 }

@@ -36,6 +36,128 @@ void Desc(T&& value, Args&&... args) {
     ImGui::Text("%.*s", int(stream.GetSize()), stream.GetData());
 }
 
+bool BeginValueTable() {
+    using namespace ImGui;
+
+    ImGuiTableFlags flags = 0;
+
+    flags |= ImGuiTableFlags_Hideable;
+    flags |= ImGuiTableFlags_Reorderable;
+    flags |= ImGuiTableFlags_Resizable;
+    flags |= ImGuiTableFlags_BordersV;
+    flags |= ImGuiTableFlags_BordersOuterH;
+    flags |= ImGuiTableFlags_RowBg;
+    flags |= ImGuiTableFlags_NoBordersInBody;
+    flags |= ImGuiTableFlags_ScrollY;
+
+    ImVec2 size(0, 200);
+
+    if (!BeginTable("valueTable", 5, flags, size)) {
+        return false;
+    }
+
+    TableSetupScrollFreeze(0, 1);
+    TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch | ImGuiTableColumnFlags_NoHide | ImGuiTableColumnFlags_NoReorder);
+    TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed);
+    TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed);
+    TableSetupColumn("Address", ImGuiTableColumnFlags_WidthFixed);
+    TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed);
+
+    TableHeadersRow();
+    return true;
+}
+
+void DrawValueTableEntry(lldb::SBValue value) {
+    using namespace ImGui;
+
+    ImGuiTreeNodeFlags flags = 0;
+
+    // Posing questions to SBValues can be very expensive if scripted
+    // synthetics are involved. Cache all we can
+    struct Data {
+        std::string value;
+
+        bool mightHaveChildren;
+        bool doesHaveChildren;
+
+        uint32_t numChildren;
+        Cache<uint32_t, SBValue> children;
+    };
+    static Cache<lldb::user_id_t, Data> s_cache(__func__);
+
+    Data& data = s_cache.GetOrCreate(value.GetID(), [&](auto) {
+        return Data {
+            .value = GetValueAsString(value),
+            .mightHaveChildren = value.MightHaveChildren(),
+            .doesHaveChildren = value.MightHaveChildren() && value.GetNumChildren(1) != 0,
+            .numChildren = 0,
+            .children = "SBValue.children",
+        };
+    });
+
+    if (data.mightHaveChildren) {
+        if (data.doesHaveChildren) {
+            // Normal state
+        } else {
+            flags |= ImGuiTreeNodeFlags_Bullet;
+        }
+    } else {
+        flags |= ImGuiTreeNodeFlags_Leaf;
+    }
+
+    TableNextRow();
+    TableSetColumnIndex(0);
+
+    bool isOpen = false;
+
+    if (TableSetColumnIndex(0)) {
+        isOpen = TreeNodeEx((void*) value.GetID(), flags, "%s", value.GetName());
+    }
+    if (TableSetColumnIndex(1)) {
+        Text("%s", data.value.c_str());
+    }
+    if (TableSetColumnIndex(2)) {
+        Text("%s", value.GetDisplayTypeName());
+    }
+    if (TableSetColumnIndex(3)) {
+        char buffer[32];
+        snprintf(buffer, sizeof(buffer), "%016llx", value.GetLoadAddress());
+
+        std::string_view addr(buffer);
+
+        auto pos = addr.find_first_not_of('0');
+        if (pos == std::string::npos) {
+            pos = 0;
+        }
+
+        TextDisabled("0x%.*s", int(pos), addr.data());
+        SameLine(0, 0);
+        Text("%s", addr.substr(pos).data());
+    }
+    if (TableSetColumnIndex(4)) {
+        Text("%zu", value.GetByteSize());
+    }
+
+    if (!isOpen) {
+        return;
+    }
+
+    // Populate child count lazily
+    if (data.numChildren == 0 && data.doesHaveChildren) {
+        data.numChildren = value.GetNumChildren();
+    }
+
+    // Draw children
+    for (uint32_t i = 0; i < data.numChildren; i++) {
+        auto child = data.children.GetOrCreate(i, [&](auto) {
+            return value.GetChildAtIndex(i);
+        });
+        DrawValueTableEntry(child);
+    }
+
+    TreePop();
+}
+
 void DrawModules(lldb::SBTarget& target) {
     using namespace ImGui;
 
@@ -375,20 +497,22 @@ void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
 
         if (!node.value.globals.empty()) {
             if (TreeNodeEx("globals", ImGuiTreeNodeFlags_Bullet, "(globals)")) {
-                for (SBValue& value : node.value.globals) {
-                    Desc(value);
-                    SameLine();
-                    Desc(value.GetAddress().GetSymbol());
+                if (BeginValueTable()) {
+                    for (SBValue& value : node.value.globals) {
+                        DrawValueTableEntry(value);
+                    }
+                    EndTable();
                 }
                 TreePop();
             }
         }
         for (auto& [func, globals] : node.value.functions) {
             if (TreeNodeEx(Unwrap(func), ImGuiTreeNodeFlags_Bullet, "(func) %s", func.GetDisplayName())) {
-                for (SBValue& value : globals) {
-                    Desc(value);
-                    SameLine();
-                    Desc(value.GetAddress().GetSymbol());
+                if (BeginValueTable()) {
+                    for (SBValue& value : globals) {
+                        DrawValueTableEntry(value);
+                    }
+                    EndTable();
                 }
                 TreePop();
             }
@@ -508,11 +632,12 @@ void DrawFrame(lldb::SBFrame frame) {
             Text("BaseName: %s", GetFunctionBaseName(func).c_str());
             Text("Class: %s", GetClassOfMemberFunction(func).GetDisplayTypeName());
 
-            auto vars = frame.GetFunction().GetBlock().GetVariables(frame, true, false, false, lldb::eNoDynamicValues);
-            for (auto i = 0; i < vars.GetSize(); i++) {
-                BulletText("%d: ", i);
-                SameLine();
-                Desc(vars.GetValueAtIndex(i));
+            if (BeginValueTable()) {
+                auto vars = frame.GetFunction().GetBlock().GetVariables(frame, true, true, false, lldb::eNoDynamicValues);
+                for (auto i = 0; i < vars.GetSize(); i++) {
+                    DrawValueTableEntry(vars.GetValueAtIndex(i));
+                }
+                EndTable();
             }
         } else {
             TextDisabled("No func");
