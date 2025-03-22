@@ -1,3 +1,5 @@
+#include "Debuggable.h"
+
 #include "imgui.h"
 
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -10,7 +12,7 @@ namespace lldb::imgui {
 /// Global switch that enables cache rendering from `Tick()` - useful for debugging
 constexpr bool kDebugCaches = false;
 
-class CacheBase {
+class CacheBase : public DebugWindow {
 public:
     /// Advance the tick number of all currently alive caches, and reap expired values
     static void Tick() {
@@ -45,7 +47,7 @@ private:
 /// This class implements a simple timed cache with a frame based grace period **specifically**
 /// for storing computed data to render in ImGui using LLDB types as keys.
 template<typename K, typename V, typename Hash = std::hash<K>, typename Eq = std::equal_to<K>>
-class Cache : CacheBase {
+class Cache final : CacheBase {
 public:
     Cache(const char* label) : CacheBase(label) {
         g_caches.insert(this);
@@ -70,20 +72,20 @@ public:
     }
 
 private:
-    void RemoveExpired() override {
-        if constexpr (kDebugCaches) {
-            using namespace ImGui;
+    void Draw() override {
+        using namespace ImGui;
 
-            if (TreeNode(this, "%p '%s' (%zu)", this, _label, _contents.size())) {
-                InputScalar("TTL", ImGuiDataType_U64, &_timeToLive);
+        if (TreeNode(this, "%p '%s' (%zu)", this, _label, _contents.size())) {
+            InputScalar("TTL", ImGuiDataType_U64, &_timeToLive);
 
-                for (const auto& pair : _contents) {
-                    Text("%p TTL: %llu", &pair.first, pair.second.expiresAt - g_tickCounter);
-                }
-                TreePop();
+            for (const auto& pair : _contents) {
+                Text("%p TTL: %llu", &pair.first, pair.second.expiresAt - g_tickCounter);
             }
+            TreePop();
         }
+    }
 
+    void RemoveExpired() override {
         std::erase_if(_contents, [](const auto& pair) {
             return pair.second.expiresAt <= g_tickCounter;
         });
