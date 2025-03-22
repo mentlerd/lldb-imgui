@@ -587,8 +587,19 @@ bool CollapsingHeader2(const char* label, ImGuiTreeNodeFlags flags = 0) {
 void DrawFrame(lldb::SBFrame frame) {
     using namespace ImGui;
 
-    char buffer[128];
-    snprintf(buffer, sizeof(buffer), "#%d: %s ###frame", frame.GetFrameID(), frame.GetDisplayFunctionName());
+    const int frameID = frame.GetFrameID();
+
+    char buffer[512];
+    snprintf(buffer, sizeof(buffer), "#%d: %s ###frame", frameID, frame.GetDisplayFunctionName());
+
+    auto func = frame.GetFunction();
+    if (func) {
+        if (auto clazz = GetClassOfMemberFunction(func)) {
+            auto base = GetFunctionBaseName(func);
+
+            snprintf(buffer, sizeof(buffer), "#%d %s::%s ###frame", frameID, clazz.GetDisplayTypeName(), base.c_str());
+        }
+    };
 
     bool isOpen = false;
 
@@ -625,26 +636,29 @@ void DrawFrame(lldb::SBFrame frame) {
     }
     PopStyleVar();
 
-    if (isOpen) {
-        TreePush((void*) uint64_t(frame.GetFrameID()));
+    if (!isOpen) {
+        return;
+    }
+    if (!func) {
+        TextDisabled("No SBFunction available");
+        return;
+    }
 
-        if (auto func = frame.GetFunction()) {
-            Text("BaseName: %s", GetFunctionBaseName(func).c_str());
-            Text("Class: %s", GetClassOfMemberFunction(func).GetDisplayTypeName());
+    // We want value tables of each frame to synchronize
+    PushOverrideID(0);
+    if (BeginValueTable()) {
+        // But don't want the values themselves to clash
+        PushID(frameID);
 
-            if (BeginValueTable()) {
-                auto vars = frame.GetFunction().GetBlock().GetVariables(frame, true, true, false, lldb::eNoDynamicValues);
-                for (auto i = 0; i < vars.GetSize(); i++) {
-                    DrawValueTableEntry(vars.GetValueAtIndex(i));
-                }
-                EndTable();
-            }
-        } else {
-            TextDisabled("No func");
+        auto vars = frame.GetFunction().GetBlock().GetVariables(frame, true, true, false, lldb::eNoDynamicValues);
+        for (auto i = 0; i < vars.GetSize(); i++) {
+            DrawValueTableEntry(vars.GetValueAtIndex(i));
         }
 
-        TreePop();
+        PopID();
+        EndTable();
     }
+    PopID();
 }
 
 void DrawThread(lldb::SBThread thread) {
