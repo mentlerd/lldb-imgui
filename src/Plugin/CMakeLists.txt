@@ -6,6 +6,9 @@ add_library(${target} SHARED
 	src/Cache.h
 	src/PathTree.h
 
+	src/LLDB_Private.h
+	src/LLDB_Private.cpp
+
 	src/Plugin.cpp
 )
 
