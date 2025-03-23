@@ -2,6 +2,8 @@ set(target Plugin)
 
 add_library(${target} SHARED
 	src/Cache.h
+	src/Cache.cpp
+
 	src/Functional.h
 	src/PathTree.h
 
@@ -13,7 +15,9 @@ add_library(${target} SHARED
 
 set_target_properties(${target} PROPERTIES
 	XCODE_GENERATE_SCHEME YES
-	XCODE_ATTRIBUTE_LINKER_DISPLAYS_MANGLED_NAMES YES
+
+	# Useful to turn on when debugging LLDB_Private.cpp linkage issues
+	XCODE_ATTRIBUTE_LINKER_DISPLAYS_MANGLED_NAMES NO
 )
 
 target_link_libraries(${target} PRIVATE

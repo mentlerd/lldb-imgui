@@ -83,7 +83,7 @@ void DrawValueTableEntry(lldb::SBValue value) {
         uint32_t numChildren;
         Cache<uint32_t, SBValue> children;
     };
-    static Cache<lldb::user_id_t, Data> s_cache(__func__);
+    static Cache<lldb::user_id_t, Data> s_cache;
 
     Data& data = s_cache.GetOrCreate(value.GetID(), [&](auto) {
         return Data {
@@ -91,7 +91,6 @@ void DrawValueTableEntry(lldb::SBValue value) {
             .mightHaveChildren = value.MightHaveChildren(),
             .doesHaveChildren = value.MightHaveChildren() && value.GetNumChildren(1) != 0,
             .numChildren = 0,
-            .children = "SBValue.children",
         };
     });
 
@@ -483,7 +482,7 @@ void DrawCompileUnitGlobals(lldb::SBTarget& target, lldb::SBCompileUnit& cu) {
             return std::hash<void*>{}(Unwrap(cu));
         }
     };
-    static Cache<SBCompileUnit, Tree, Hasher> g_cache(__func__);
+    static Cache<SBCompileUnit, Tree, Hasher> g_cache;
 
     Tree& tree = g_cache.GetOrCreate(cu, treeBuilder);
 

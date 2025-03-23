@@ -1,9 +1,7 @@
-#include "DebugWindow.h"
+#include "Debuggable.h"
 #include "Functional.h"
 
 #include "imgui.h"
-
-#include "llvm/ADT/STLFunctionalExtras.h"
 
 #include <unordered_set>
 #include <unordered_map>
@@ -13,30 +11,14 @@ namespace lldb::imgui {
 /// Global switch that enables cache rendering from `Tick()` - useful for debugging
 constexpr bool kDebugCaches = false;
 
-class CacheBase : public DebugWindow {
+class CacheBase {
 public:
     /// Advance the tick number of all currently alive caches, and reap expired values
-    static void Tick() {
-        g_tickCounter++;
-
-        for (auto* ptr : g_caches) {
-            ptr->RemoveExpired();
-        }
-    }
+    static void Tick();
 
 protected:
     /// Global frame counter for cache expiration
-    inline static uint64_t g_tickCounter = 0;
-
-    /// Global registry of alive cache objects
-    inline static std::unordered_set<CacheBase*> g_caches;
-
-    CacheBase(const char* label)
-    : _label(label)
-    {}
-
-    /// Label displayed on the UI for debugging purposes
-    const char* _label;
+    static uint64_t g_tickCounter;
 
 private:
     virtual void RemoveExpired() = 0;
@@ -48,19 +30,10 @@ private:
 /// This class implements a simple timed cache with a frame based grace period **specifically**
 /// for storing computed data to render in ImGui using LLDB types as keys.
 template<typename K, typename V, typename Hash = std::hash<K>, typename Eq = std::equal_to<K>>
-class Cache final : CacheBase {
+class Cache final : public CacheBase,
+                    public Registered<Cache<K, V, Hash, Eq>, CacheBase>,
+                    public Debuggable<Cache<K, V, Hash, Eq>> {
 public:
-    Cache(const char* label) : CacheBase(label) {
-        g_caches.insert(this);
-    }
-
-    Cache(const Cache&) = delete;
-    Cache& operator=(const Cache&) = delete;
-
-    ~Cache() {
-        g_caches.erase(this);
-    }
-
     V& GetOrCreate(const K& key, FuncRef<V(CView<K>)> builder) {
         Entry& entry = _contents[key];
 
@@ -72,20 +45,15 @@ public:
         return *entry.value();
     }
 
-private:
-    void Draw() override {
-        using namespace ImGui;
+    void DrawDebugUI() {
+        ImGui::InputScalar("TTL", ImGuiDataType_U64, &_timeToLive);
 
-        if (TreeNode(this, "%p '%s' (%zu)", this, _label, _contents.size())) {
-            InputScalar("TTL", ImGuiDataType_U64, &_timeToLive);
-
-            for (const auto& pair : _contents) {
-                Text("%p TTL: %llu", &pair.first, pair.second.expiresAt - g_tickCounter);
-            }
-            TreePop();
+        for (const auto& pair : _contents) {
+            ImGui::Text("%p TTL: %llu", &pair.first, pair.second.expiresAt - g_tickCounter);
         }
     }
 
+private:
     void RemoveExpired() override {
         std::erase_if(_contents, [](const auto& pair) {
             return pair.second.expiresAt <= g_tickCounter;
