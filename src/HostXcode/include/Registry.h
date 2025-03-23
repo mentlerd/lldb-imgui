@@ -30,10 +30,10 @@ private:
     template<typename Derived, typename Registry, Registry* Into>
     friend class AutoRegistrar;
 
-    void Register(PointerType pointer) {
+    void Register(PointerType pointer, size_t unused) {
         _pointers.insert(pointer);
     }
-    void Unregister(PointerType pointer) {
+    void Unregister(PointerType pointer, size_t unused) {
         _pointers.erase(pointer);
     }
 
@@ -42,18 +42,9 @@ private:
 
 /// CRTP base class for automatic instance registration. For most usecases you shouldn't
 /// use this as a baseclass directly, use `Registered` or `RegisteredInto` instead.
-///
-/// **Moving** the implementation takes a conservative approach in assuming that moved-from
-/// objects are left in an unspecified state where nothing but the destructor is safe to call.
-///
-/// Based on this assumption `AutoRegistrar` objects remove themselves from their registry
-/// when moved-from.
 template<typename Derived, typename Registry, Registry* Into>
 class AutoRegistrar {
 protected:
-    /// `Registry<T>` and `Derived` must be convertible
-    static_assert(std::is_nothrow_convertible_v<Derived*, typename Registry::PointerType>);
-
     static Registry* GetRegistry() {
         if constexpr (Into) {
             return Into;
@@ -61,34 +52,18 @@ protected:
         return &Registry::Default();
     }
 
-    inline AutoRegistrar() {
-        Register();
+    AutoRegistrar() {
+        GetRegistry()->Register(static_cast<Derived*>(this), sizeof(Derived));
     }
 
-    inline AutoRegistrar(const AutoRegistrar& other) {
-        Register();
-    }
-    inline AutoRegistrar& operator=(const AutoRegistrar& other) {
-        return *this;
-    }
+    AutoRegistrar(const AutoRegistrar&) : AutoRegistrar() {}
+    AutoRegistrar(AutoRegistrar&&) : AutoRegistrar() {}
 
-    inline AutoRegistrar(AutoRegistrar&& victim) : AutoRegistrar() {
-        victim.Unregister();
-    }
-    inline AutoRegistrar& operator=(AutoRegistrar&& victim) {
-        victim.Unregister();
-        return *this;
-    }
+    AutoRegistrar& operator=(const AutoRegistrar&) = default;
+    AutoRegistrar& operator=(AutoRegistrar&&) = default;
 
-    inline ~AutoRegistrar() {
-        Unregister();
-    }
-
-    void Register() {
-        GetRegistry()->Register(static_cast<Derived*>(this));
-    }
-    void Unregister() {
-        GetRegistry()->Unregister(static_cast<Derived*>(this));
+    ~AutoRegistrar() {
+        GetRegistry()->Unregister(static_cast<Derived*>(this), sizeof(Derived));
     }
 };
 
