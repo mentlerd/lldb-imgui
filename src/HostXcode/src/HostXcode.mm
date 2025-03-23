@@ -291,11 +291,10 @@ void ReloadPlugin() {
 
 namespace lldb::imgui {
 
-Registry<DebugWindow> g_debugWindows;
-
 template<>
 Registry<DebugWindow>& Registry<DebugWindow>::Default() {
-    return g_debugWindows;
+    static Registry<DebugWindow> instance;
+    return instance;
 }
 
 struct Demo final : DebugWindow {
@@ -340,7 +339,7 @@ void DrawDebugWindows() {
     {
         auto oldStates = std::exchange(s_states, {});
 
-        for (DebugWindow* window : g_debugWindows.View()) {
+        for (DebugWindow* window : Registry<DebugWindow>::Default().View()) {
             DebugWindow::State* state = nullptr;
 
             auto node = oldStates.extract(window);
