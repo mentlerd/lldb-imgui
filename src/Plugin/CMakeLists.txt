@@ -1,7 +1,5 @@
 set(target Plugin)
 
-find_package(llvm REQUIRED config LLVMSupport)
-
 add_library(${target} SHARED
 	src/Cache.h
 	src/Functional.h
@@ -20,5 +18,4 @@ set_target_properties(${target} PROPERTIES
 
 target_link_libraries(${target} PRIVATE
 	HostXcode
-	LLVMSupport
 )

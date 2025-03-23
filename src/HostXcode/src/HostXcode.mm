@@ -1,4 +1,5 @@
 #include "Debuggable.h"
+#include "DebugWindow.h"
 #include "MainThreadHijacker.h"
 #include "Logging.h"
 

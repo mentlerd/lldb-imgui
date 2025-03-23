@@ -1,11 +1,16 @@
 set(target HostXcode)
 
+find_package(llvm REQUIRED config LLVMSupport)
+
 add_library(${target} SHARED
 	include/CocoaWrapper.h
+	include/DebugWindow.h
 	include/LLDB_Exposer.h
 	include/Logging.h
 	include/Registry.h
+
 	include/Debuggable.h
+	src/Debuggable.cpp
 
 	src/CocoaWrapper.mm
 	src/LLDB_Exposer.cpp
@@ -28,6 +33,7 @@ target_link_libraries(${target}
 	PUBLIC
 		XcodeLLDB
 		ImGui
+		LLVMSupport
 
 	PRIVATE
 		ImGui_Backend
