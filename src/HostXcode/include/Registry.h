@@ -27,8 +27,15 @@ public:
     }
 
 private:
-    template<typename Derived, auto* Into>
+    template<typename Derived, typename Registry, Registry* Into>
     friend class AutoRegistrar;
+
+    void Register(PointerType pointer) {
+        _pointers.insert(pointer);
+    }
+    void Unregister(PointerType pointer) {
+        _pointers.erase(pointer);
+    }
 
     std::unordered_set<PointerType> _pointers;
 };
@@ -41,12 +48,9 @@ private:
 ///
 /// Based on this assumption `AutoRegistrar` objects remove themselves from their registry
 /// when moved-from.
-template<typename Derived, auto* Into = nullptr>
+template<typename Derived, typename Registry, Registry* Into>
 class AutoRegistrar {
 protected:
-    /// `Registry<T>` into which we'll register `Derived`
-    using Registry = std::remove_cvref_t<decltype(*Into)>;
-
     /// `Registry<T>` and `Derived` must be convertible
     static_assert(std::is_nothrow_convertible_v<Derived*, typename Registry::PointerType>);
 
@@ -81,19 +85,19 @@ protected:
     }
 
     void Register() {
-        GetRegistry()->_pointers.insert(static_cast<Derived*>(this));
+        GetRegistry()->Register(static_cast<Derived*>(this));
     }
     void Unregister() {
-        GetRegistry()->_pointers.erase(static_cast<Derived*>(this));
+        GetRegistry()->Unregister(static_cast<Derived*>(this));
     }
 };
 
 /// CRTP base class for automatic registration of `T` instances into `Registry<T>::Default()`
 template<typename Derived, typename T = Derived>
-using Registered = AutoRegistrar<Derived, (Registry<T>*) nullptr>;
+using Registered = AutoRegistrar<Derived, Registry<T>, nullptr>;
 
 /// CRTP base class for automatic registraion of `T` instances into the specified `Registry<T>`
 template<typename Derived, auto& Into>
-using RegisteredInto = AutoRegistrar<Derived, &Into>;
+using RegisteredInto = AutoRegistrar<Derived, std::remove_cvref_t<decltype(*Into)>, &Into>;
 
 }
