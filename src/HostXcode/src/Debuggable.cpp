@@ -242,12 +242,16 @@ void Debuggables::BuildConnectivity() {
         uintptr_t cursor = range.first;
         uintptr_t cursorMax = range.second;
 
-        if (auto offset = cursor % sizeof(void*)) {
-            cursor += sizeof(void*) - offset;
+        if (auto offset = cursor % alignof(void*)) {
+            ImGui::Text("[%d] misalign %zu", depth, offset);
+
+            cursor += alignof(void*) - offset;
         }
 
         for (; cursor < cursorMax; cursor += sizeof(void*)) {
             uintptr_t startAddr = *reinterpret_cast<uintptr_t*>(cursor);
+
+            ImGui::Text("[%d] %lx +%zu = %lx", depth, range.first, cursor - range.first, startAddr);
 
             if (startAddr < 4096) {
                 continue; // Zeropage pointer
@@ -256,6 +260,9 @@ void Debuggables::BuildConnectivity() {
                 continue; // Not malloc'd
             }
             uintptr_t endAddr = startAddr + malloc_size((void*) startAddr);
+
+            ImGui::SameLine();
+            ImGui::Text("(malloc %zu)", endAddr - startAddr);
 
             // Flag everything without a container in the malloc'd area as referenced
             bool foundSome = false;
@@ -266,6 +273,8 @@ void Debuggables::BuildConnectivity() {
                 if (entry.container != 0) {
                     continue;
                 }
+
+                ImGui::Text("[%d] some @%lx %zu", depth, range.start, range.stop - range.start);
 
                 entry.referrers.insert(rid);
                 rentry.referenced.insert(range.value);

@@ -70,6 +70,8 @@ bool BeginValueTable() {
 void DrawValueTableEntry(lldb::SBValue value) {
     using namespace ImGui;
 
+    value.SetPreferSyntheticValue(false);
+
     ImGuiTreeNodeFlags flags = 0;
 
     // Posing questions to SBValues can be very expensive if scripted
@@ -723,6 +725,27 @@ void DrawThreads(lldb::SBTarget target) {
 }
 
 #define API __attribute__((used))
+
+struct A : Debuggable<A> {
+    int a;
+
+    void DrawDebugUI() {}
+};
+
+struct B : Debuggable<B> {
+    std::unordered_map<int, A> a;
+
+    B() {
+        a.reserve(32);
+        a.try_emplace(0);
+        a.try_emplace(1);
+//        a.try_emplace(2);
+    }
+
+    void DrawDebugUI() {}
+};
+
+B global;
 
 API void Draw() {
     CacheBase::Tick();
