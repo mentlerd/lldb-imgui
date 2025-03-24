@@ -1,3 +1,6 @@
 [submodule "libs/imgui"]
 	path = libs/imgui
 	url = https://github.com/ocornut/imgui.git
+[submodule "libs/intervaltree"]
+	path = libs/intervaltree
+	url = https://github.com/ekg/intervaltree.git

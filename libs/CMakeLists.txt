@@ -1,4 +1,15 @@
 
+# =====/ intervaltree /========================================
+
+set(intervaltree_ROOT "${CMAKE_SOURCE_DIR}/libs/intervaltree")
+
+add_library(intervaltree INTERFACE
+	"${intervaltree_ROOT}/IntervalTree.h"
+)
+target_include_directories(intervaltree INTERFACE
+	"${intervaltree_ROOT}"
+)
+
 # =====/ ImGui /========================================
 
 set(ImGui_ROOT "${CMAKE_SOURCE_DIR}/libs/imgui")

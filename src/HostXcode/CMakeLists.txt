@@ -36,6 +36,7 @@ target_link_libraries(${target}
 		LLVMSupport
 
 	PRIVATE
+		intervaltree
 		ImGui_Backend
 
 		"-framework Cocoa"
