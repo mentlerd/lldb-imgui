@@ -1,6 +1,8 @@
 set(target Plugin)
 
 add_library(${target} SHARED
+	src/Dump.h
+
 	src/Cache.h
 	src/Cache.cpp
 

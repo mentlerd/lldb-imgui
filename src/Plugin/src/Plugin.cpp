@@ -1,4 +1,5 @@
 
+#include "Dump.h"
 #include "Cache.h"
 #include "PathTree.h"
 
@@ -724,7 +725,43 @@ void DrawThreads(lldb::SBTarget target) {
 
 #define API __attribute__((used))
 
+class InspectorGUI : public inspector::Visitor {
+    bool TryEnter(std::string_view type, std::string_view name, void* ptrToValue) override {
+        return ImGui::TreeNode(ptrToValue, "%s (%s)", name.data(), type.data());
+    }
+    void Leave() override{
+        ImGui::TreePop();
+    }
+    void Error(std::string_view error) override {
+        ImGui::TextColored(ImVec4(0.8, 0.2, 0.2, 1.0), "Error: %s", error.data());
+    }
+};
+
 API void Draw() {
+    struct Inner {
+        std::string name = "Inner";
+    };
+    struct Middle {
+        std::string name = "Middle";
+        std::vector<Inner> vector = {
+            Inner(), Inner()
+        };
+    };
+    struct Outer {
+        std::string name = "Outer";
+        std::unordered_map<std::string, Middle> map = {
+            { "middle0", Middle() },
+            { "middle1", Middle() }
+        };
+    };
+    static Cache<std::string, Outer> cache;
+
+    cache.GetOrCreate("0", [](auto) { return Outer(); });
+    cache.GetOrCreate("1", [](auto) { return Outer(); });
+
+    InspectorGUI visitor;
+    inspector::Dumper::Driver<decltype(cache)>(visitor, &cache);
+
     CacheBase::Tick();
 }
 
