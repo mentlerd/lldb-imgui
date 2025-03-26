@@ -35,14 +35,13 @@ class Cache final : public CacheBase,
                     public Debuggable<Cache<K, V, Hash, Eq>> {
 public:
     V& GetOrCreate(const K& key, FuncRef<V(CView<K>)> builder) {
-        Entry& entry = _contents[key];
-
-        if (entry.expiresAt == 0) {
-            new (entry.value()) V(builder(key));
+        auto it = _contents.find(key);
+        if (it == _contents.end()) {
+            it = _contents.emplace(key, builder(key)).first;
         }
-        entry.expiresAt = g_tickCounter + _timeToLive;
 
-        return *entry.value();
+        it->second.expiresAt = g_tickCounter + _timeToLive;
+        return it->second.value;
     }
 
     void DrawDebugUI() {
@@ -61,17 +60,10 @@ private:
     }
 
     struct Entry {
-        alignas(V) char buffer[sizeof(V)];
-        uint64_t expiresAt = 0;
+        V value;
+        uint64_t expiresAt;
 
-        V* value() {
-            return reinterpret_cast<V*>(&buffer);
-        }
-        ~Entry() {
-            if (expiresAt != 0) {
-                value()->~V();
-            }
-        }
+        explicit Entry(V&& value): value(value) {}
     };
 
     /// Number of frames a cached entry is supposed to survive without access
