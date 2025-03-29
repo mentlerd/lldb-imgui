@@ -10,6 +10,7 @@
 #import <MetalKit/MetalKit.h>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_metal.h"
 #include "imgui_impl_osx.h"
 
@@ -195,8 +196,6 @@ std::filesystem::path GetExecutablePath() {
     return buffer;
 }
 
-void ReloadPlugin();
-
 void MainLoop() {
     static std::once_flag flag;
 
@@ -210,8 +209,6 @@ void MainLoop() {
 
         [application setDelegate:applicationDelegate];
         [application run];
-
-        ReloadPlugin();
     });
 
     while (true) {
@@ -241,53 +238,6 @@ void MainLoopInterrupt() {
                                                data2: 0];
         [NSApp postEvent: event atStart: YES];
     }
-}
-
-using PluginDraw = void (*)();
-using PluginDrawDebugger = void(*)(lldb::SBDebugger&);
-
-void* g_plugin = nullptr;
-
-PluginDraw g_pluginDraw = nullptr;
-PluginDrawDebugger g_pluginDrawDebugger = nullptr;
-
-void ReloadPlugin() {
-    using namespace lldb::imgui;
-
-    if (g_plugin) {
-        if (dlclose(g_plugin)) {
-            Log("Failed to unload plugin: {}", dlerror());
-            return;
-        }
-
-        g_plugin = nullptr;
-        g_pluginDraw = nullptr;
-        g_pluginDrawDebugger = nullptr;
-    }
-
-    Dl_info info;
-    if (dladdr(reinterpret_cast<void*>(ReloadPlugin), &info) == 0) {
-        Log("Failed to determine plugin host path");
-        return;
-    }
-
-    auto hostPath = std::filesystem::path(info.dli_fname);
-
-    // TODO: This is specific to building with Xcode
-    auto pluginPath = hostPath.parent_path().parent_path().parent_path() / "Plugin/Debug/libPlugin.dylib";
-
-    Log("Trying to load plugin from '{}'", pluginPath.c_str());
-    g_plugin = dlopen(pluginPath.c_str(), RTLD_LOCAL | RTLD_NOW);
-
-    if (!g_plugin) {
-        Log("Failed to load plugin: {}", dlerror());
-        return;
-    }
-
-    g_pluginDraw = reinterpret_cast<PluginDraw>(dlsym(g_plugin, "_ZN4lldb5imgui4DrawEv"));
-    g_pluginDrawDebugger = reinterpret_cast<PluginDrawDebugger>(dlsym(g_plugin, "_ZN4lldb5imgui4DrawERNS_10SBDebuggerE"));
-
-    Log("Plugin loaded: {} {}", (void*) g_pluginDraw, (void*) g_pluginDrawDebugger);
 }
 
 namespace lldb::imgui {
@@ -410,7 +360,197 @@ void DrawDebugWindows() {
 
 }
 
+#include <unordered_map>
+#include <cstdlib>
 
+using PluginID = uint32_t;
+
+struct Plugin {
+    using TickGlobal = void(*)();
+    using TickDebugger = void(*)(lldb::SBDebugger&);
+
+    inline static PluginID g_nextID = 0;
+    inline static std::unordered_map<PluginID, Plugin> g_plugins = {};
+
+    /// Persistent state
+    std::filesystem::path path;
+    bool enabled = false;
+
+    std::string status = "Pending";
+    void* handle = nullptr;
+
+    TickGlobal tickGlobal = nullptr;
+    TickDebugger tickDebugger = nullptr;
+
+    void Unload() {
+        tickGlobal = nullptr;
+        tickDebugger = nullptr;
+
+        if (dlclose(handle)) {
+            status = std::format("Failed to unload: {}", dlerror());
+            return;
+        }
+
+        handle = nullptr;
+    }
+    void Load() {
+        Unload();
+
+        handle = dlopen(path.c_str(), RTLD_LOCAL | RTLD_NOW);
+
+        if (!handle) {
+            status = std::format("Failed to load: {}", dlerror());
+            return;
+        }
+
+        tickGlobal = reinterpret_cast<TickGlobal>(dlsym(handle, "_ZN4lldb5imgui4DrawEv"));
+        tickDebugger = reinterpret_cast<TickDebugger>(dlsym(handle, "_ZN4lldb5imgui4DrawERNS_10SBDebuggerE"));
+        status = "Loaded";
+    }
+};
+
+static ImGuiSettingsHandler g_pluginSettingsHandler = []{
+    ImGuiSettingsHandler handler;
+
+    handler.TypeName = "Plugins";
+    handler.TypeHash = ImHashStr(handler.TypeName);
+
+    handler.ClearAllFn = [](auto, auto) {
+        // Ignore
+    };
+    handler.ReadInitFn = [](auto, auto) {
+        Plugin::g_nextID = 0;
+    };
+    handler.ReadOpenFn = [](auto, auto, const char* name) -> void* {
+        PluginID key = atoi(name);
+
+        Plugin::g_nextID = std::max(Plugin::g_nextID, key + 1);
+        return &Plugin::g_plugins[key];
+    };
+    handler.ReadLineFn = [](auto, auto, void* ptr, const char* rawLine) {
+        auto& plugin = *static_cast<Plugin*>(ptr);
+
+        std::string_view line = rawLine;
+
+        if (line.starts_with("path=")) {
+            plugin.path = line.substr(6);
+        }
+        if (line.starts_with("enabled=1")) {
+            plugin.enabled = true;
+        }
+    };
+    handler.ApplyAllFn = [](auto, auto) {
+        for (auto& [key, plugin] : Plugin::g_plugins) {
+            if (plugin.enabled) {
+                plugin.Load();
+            }
+        }
+    };
+    handler.WriteAllFn = [](auto, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buffer) {
+        for (const auto& [key, plugin] : Plugin::g_plugins) {
+            buffer->appendf("[%s][%d]\n", handler->TypeName, key);
+
+            buffer->appendf("path=%s\n", plugin.path.c_str());
+            buffer->appendf("enabled=%d\n", plugin.enabled);
+        }
+    };
+
+    return handler;
+}();
+
+void SaveIniSettingsNow() {
+    ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
+}
+
+void DrawPluginsMenu() {
+    using namespace ImGui;
+
+    if (FindSettingsHandler(g_pluginSettingsHandler.TypeName) == nullptr) {
+        AddSettingsHandler(&g_pluginSettingsHandler);
+        LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
+    }
+
+    const auto drawPluginItems = [] {
+        // Draw plugins in alphabetical order, break ties with pointer
+        struct Entry {
+            std::string_view name;
+            PluginID key;
+
+            auto operator<=>(const Entry&) const = default;
+        };
+        std::vector<Entry> plugins;
+
+        for (auto& [key, plugin] : Plugin::g_plugins) {
+            plugins.push_back(Entry{
+                .name = plugin.path.stem().generic_string(),
+                .key = key,
+            });
+        }
+        std::sort(plugins.begin(), plugins.end());
+
+        if (plugins.empty()) {
+            TextDisabled("None");
+            return;
+        }
+
+        for (Entry& entry : plugins) {
+            Plugin& plugin = Plugin::g_plugins.at(entry.key);
+
+            PushID(entry.key);
+            if (Checkbox(entry.name.data(), &plugin.enabled)) {
+                if (plugin.enabled) {
+                    plugin.Load();
+                } else {
+                    plugin.Unload();
+                }
+                SaveIniSettingsNow();
+            }
+            if (BeginItemTooltip()) {
+                Text("Path: %s", plugin.path.c_str());
+                Text("Status: %s", plugin.status.c_str());
+                EndTooltip();
+            }
+            PopID();
+        }
+    };
+
+    bool popup = false;
+
+    if (BeginMainMenuBar()) {
+        if (BeginMenu("Plugins")) {
+            drawPluginItems();
+            Separator();
+
+            popup = MenuItem("Add");
+            EndMenu();
+        }
+        EndMainMenuBar();
+    }
+
+    if (popup) {
+        OpenPopup("AddPlugin");
+    }
+    if (BeginPopup("AddPlugin")) {
+        static char rawPath[2048];
+        InputTextWithHint("###path", "Enter absolute path...", rawPath, sizeof(rawPath));
+
+        bool exists = std::filesystem::exists(rawPath);
+        if (!exists) {
+            BeginDisabled();
+        }
+        if (Button("Add plugin")) {
+            Plugin::g_plugins[Plugin::g_nextID++] = Plugin {
+                .path = rawPath,
+            };
+            SaveIniSettingsNow();
+            CloseCurrentPopup();
+        }
+        if (!exists) {
+            EndDisabled();
+        }
+        EndPopup();
+    }
+}
 
 std::mutex g_debuggersMutex;
 std::map<lldb::user_id_t, lldb::SBDebugger> g_debuggers;
@@ -418,14 +558,7 @@ std::map<lldb::user_id_t, lldb::SBDebugger> g_debuggers;
 void DrawFrame() {
     ImGui::NewFrame();
 
-    static bool s_showLogs = false;
-
-    if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::Button("Reload plugin")) {
-            ReloadPlugin();
-        }
-        ImGui::EndMainMenuBar();
-    }
+    DrawPluginsMenu();
 
     {
         std::scoped_lock lock(g_debuggersMutex);
@@ -447,8 +580,10 @@ void DrawFrame() {
         });
     }
 
-    if (g_pluginDraw) {
-        g_pluginDraw();
+    for (auto& [_, plugin] : Plugin::g_plugins) {
+        if (plugin.tickGlobal) {
+            plugin.tickGlobal();
+        }
     }
 
     lldb::imgui::DrawDebugWindows();
@@ -472,8 +607,10 @@ public:
 
 class DrawCommand : public lldb::SBCommandPluginInterface {
     bool DoExecute(lldb::SBDebugger debugger, char** command, lldb::SBCommandReturnObject& result) override {
-        if (g_pluginDrawDebugger) {
-            g_pluginDrawDebugger(debugger);
+        for (auto& [_, plugin] : Plugin::g_plugins) {
+            if (plugin.tickDebugger) {
+                plugin.tickDebugger(debugger);
+            }
         }
         return true;
     }
