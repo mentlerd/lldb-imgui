@@ -1,4 +1,7 @@
 
+# =====/ spdlog /========================================
+add_subdirectory(spdlog)
+
 # =====/ ImGui /========================================
 
 set(ImGui_ROOT "${CMAKE_SOURCE_DIR}/libs/imgui")
@@ -45,8 +48,18 @@ target_link_libraries(XcodeLLDB INTERFACE
 
 
 # Move all targets added into a separate IDE directory
-get_property(targets DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY BUILDSYSTEM_TARGETS)
+macro(_tweakTargetsRecursive dir)
+    get_property(subdirectories DIRECTORY ${dir} PROPERTY SUBDIRECTORIES)
+    foreach(subdir IN LISTS subdirectories)
+        _tweakTargetsRecursive("${subdir}")
+    endforeach()
 
-foreach(target ${targets})
-	set_target_properties(${target} PROPERTIES FOLDER "Libs")
-endforeach()
+    get_property(targets DIRECTORY "${dir}" PROPERTY BUILDSYSTEM_TARGETS)
+    file(RELATIVE_PATH rdir "${CMAKE_CURRENT_SOURCE_DIR}" "${dir}/..")
+
+    foreach(target ${targets})
+    	set_target_properties(${target} PROPERTIES FOLDER "Libs")
+    endforeach()
+endmacro()
+
+_tweakTargetsRecursive("${CMAKE_CURRENT_SOURCE_DIR}")
