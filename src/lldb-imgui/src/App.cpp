@@ -160,6 +160,9 @@ SDL_AppResult App::Event(const SDL_Event& event) {
     if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(_window)) {
         return SDL_APP_SUCCESS;
     }
+    if (event.type == SDL_EVENT_QUIT) {
+        return SDL_APP_SUCCESS;
+    }
 
     return SDL_APP_CONTINUE;
 }
@@ -174,7 +177,8 @@ void App::Quit() {
     SDL_ReleaseWindowFromGPUDevice(_gpu, _window);
     SDL_DestroyGPUDevice(_gpu);
     SDL_DestroyWindow(_window);
-    SDL_Quit();
+
+    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
 }
 
 }
