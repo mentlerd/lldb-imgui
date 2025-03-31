@@ -1,16 +1,18 @@
 set(target lldb-imgui)
 
-find_package(SDL3 REQUIRED)
+# No globbing this early into the project is just unsustainable.. 
+file(GLOB sources CONFIGURE_DEPENDS 
+    "${CMAKE_CURRENT_SOURCE_DIR}/**/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/**/*.cpp"
+)
+list(REMOVE_ITEM sources "${CMAKE_CURRENT_SOURCE_DIR}/src/MainRPCServer.cpp")
 
-add_executable(${target}
-    src/App.h
-    src/App.cpp
-
-    src/MainSDL.cpp
+add_executable(${target} 
+    ${sources}
 )
 target_link_libraries(${target} PRIVATE
     ImGui
-    SDL3::SDL3
+    ImGui_Backend
     spdlog
     XcodeLLDB
 )
@@ -25,17 +27,6 @@ set_target_properties(${target} PROPERTIES
 
     XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.mentlerd.lldb-imgui.app"
 	XCODE_GENERATE_SCHEME YES
-)
-
-# ImGui backend
-target_include_directories(${target} PRIVATE
-    "${CMAKE_SOURCE_DIR}/libs/imgui/backends"
-)
-target_sources(${target} PRIVATE
-    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdl3.h"
-    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdl3.cpp"
-    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdlgpu3.h"
-    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdlgpu3.cpp"
 )
 
 # Include support to act as an LLDB plugin in Xcode's lldb-rpc-server
@@ -108,4 +99,11 @@ if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
         MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
         RESOURCE "${icns}"
     )
+endif()
+
+# Tweak Xcode file structure
+if (XCODE)
+    get_target_property(sources ${target} SOURCES)
+    list(FILTER sources EXCLUDE REGEX "^${CMAKE_CURRENT_BINARY_DIR}")
+    source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${sources})
 endif()

@@ -1,4 +1,6 @@
 
+find_package(SDL3 REQUIRED)
+
 # =====/ spdlog /========================================
 add_subdirectory(spdlog)
 
@@ -19,16 +21,17 @@ target_include_directories(ImGui SYSTEM PUBLIC
 )
 
 add_library(ImGui_Backend STATIC
-	"${ImGui_ROOT}/backends/imgui_impl_osx.h"
-	"${ImGui_ROOT}/backends/imgui_impl_osx.mm"
-	"${ImGui_ROOT}/backends/imgui_impl_metal.h"	
-	"${ImGui_ROOT}/backends/imgui_impl_metal.mm"
+    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdl3.h"
+    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdl3.cpp"
+    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdlgpu3.h"
+    "${CMAKE_SOURCE_DIR}/libs/imgui/backends/imgui_impl_sdlgpu3.cpp"
 )
-target_include_directories(ImGui_Backend SYSTEM PUBLIC
-	"${ImGui_ROOT}/backends"
+target_include_directories(ImGui_Backend PUBLIC
+    "${CMAKE_SOURCE_DIR}/libs/imgui/backends"
 )
 target_link_libraries(ImGui_Backend PUBLIC
-	ImGui
+    ImGui
+    SDL3::SDL3
 )
 
 # =====/ Xcode's LLDB.framework /========================================
