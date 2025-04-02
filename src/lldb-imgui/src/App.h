@@ -15,6 +15,10 @@ public:
     void Quit();
 
 private:
+    static bool EventWatch(void* userdata, SDL_Event* event);
+
+    void Draw();
+
     SDL_Window* _window = nullptr;
     SDL_GPUDevice* _gpu = nullptr;
 };

@@ -64,10 +64,23 @@ static void LogAdapter(void* userdata, int rawCategory, SDL_LogPriority priority
     }
 }
 
+bool App::EventWatch(void* userdata, SDL_Event* event) {
+    auto* app = reinterpret_cast<App*>(userdata);
+
+    switch (event->type) {
+        // Redraw window contents immediately to avoid the "jelly" resizing effect
+        case SDL_EVENT_WINDOW_EXPOSED: {
+            app->Draw();
+            return false;
+        }
+    }
+    return true;
+}
+
 SDL_AppResult App::Init(std::span<const std::string_view> args) {
     SDL_SetLogOutputFunction(LogAdapter, nullptr);
 
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
+    if (!SDL_Init(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         return SDL_APP_FAILURE;
     }
 
@@ -77,7 +90,9 @@ SDL_AppResult App::Init(std::span<const std::string_view> args) {
     if (!_gpu || !_window || !SDL_ClaimWindowForGPUDevice(_gpu, _window)) {
         return SDL_APP_FAILURE;
     }
-    SDL_SetGPUSwapchainParameters(_gpu, _window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_MAILBOX);
+
+    SDL_SetGPUSwapchainParameters(_gpu, _window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC);
+    SDL_AddEventWatch(EventWatch, this);
 
     // Setup ImGui
     ImGui::CreateContext();
@@ -109,7 +124,40 @@ SDL_AppResult App::Iterate() {
         return SDL_APP_CONTINUE;
     }
 
-    // Start the Dear ImGui frame
+    Draw();
+
+    return SDL_APP_CONTINUE;
+}
+
+SDL_AppResult App::Event(const SDL_Event& event) {
+    ImGui_ImplSDL3_ProcessEvent(&event);
+
+    if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(_window)) {
+        return SDL_APP_SUCCESS;
+    }
+    if (event.type == SDL_EVENT_QUIT) {
+        return SDL_APP_SUCCESS;
+    }
+
+    return SDL_APP_CONTINUE;
+}
+
+void App::Quit() {
+    SDL_WaitForGPUIdle(_gpu);
+
+    ImGui_ImplSDL3_Shutdown();
+    ImGui_ImplSDLGPU3_Shutdown();
+    ImGui::DestroyContext();
+
+    SDL_RemoveEventWatch(EventWatch, this);
+    SDL_ReleaseWindowFromGPUDevice(_gpu, _window);
+    SDL_DestroyGPUDevice(_gpu);
+    SDL_DestroyWindow(_window);
+
+    SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
+}
+
+void App::Draw() {
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
 
@@ -150,35 +198,6 @@ SDL_AppResult App::Iterate() {
 
     // Submit the command buffer
     SDL_SubmitGPUCommandBuffer(command_buffer);
-
-    return SDL_APP_CONTINUE;
-}
-
-SDL_AppResult App::Event(const SDL_Event& event) {
-    ImGui_ImplSDL3_ProcessEvent(&event);
-
-    if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(_window)) {
-        return SDL_APP_SUCCESS;
-    }
-    if (event.type == SDL_EVENT_QUIT) {
-        return SDL_APP_SUCCESS;
-    }
-
-    return SDL_APP_CONTINUE;
-}
-
-void App::Quit() {
-    SDL_WaitForGPUIdle(_gpu);
-
-    ImGui_ImplSDL3_Shutdown();
-    ImGui_ImplSDLGPU3_Shutdown();
-    ImGui::DestroyContext();
-
-    SDL_ReleaseWindowFromGPUDevice(_gpu, _window);
-    SDL_DestroyGPUDevice(_gpu);
-    SDL_DestroyWindow(_window);
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
 }
 
 }
