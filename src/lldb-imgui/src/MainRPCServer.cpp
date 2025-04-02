@@ -11,6 +11,9 @@
 #include <sys/stat.h>
 #include <malloc/malloc.h>
 #include <mach/mach.h>
+#include <mach-o/dyld.h>
+#include <mach-o/getsect.h>
+#include <mach-o/ldsyms.h>
 #include <signal.h>
 #include <unistd.h>
 
@@ -98,7 +101,9 @@ auto logger = spdlog::logger("Injection", loggerBuffer);
 
 static constexpr std::string_view kSocketVTable = "_ZTVN10rpc_common19RPCConnectionSocketE";
 static constexpr std::string_view kSocketIsConnected = "_ZNK10rpc_common19RPCConnectionSocket11IsConnectedEv";
+
 static constexpr std::string_view kSocketRead = "_ZN10rpc_common19RPCConnectionSocket4ReadERNSt3__112basic_stringIhNS1_11char_traitsIhEENS1_9allocatorIhEEEEb";
+static constexpr std::string_view kSocketRead2 = "_ZN10rpc_common19RPCConnectionSocket4ReadERNSt3__16vectorIhNS1_9allocatorIhEEEEb";
 
 int g_socketFD = -1;
 int* g_socketFDPtr = nullptr;
@@ -167,6 +172,16 @@ size_t Read(void* socket, std::string& buffer, bool append) {
     }
 }
 
+size_t Read2(void* socket, std::vector<uint8_t>& buffer, bool append) {
+    std::string staging;
+    auto nread = Read(socket, staging, true);
+
+    if (!append) {
+        buffer.clear();
+    }
+    buffer.insert(buffer.end(), staging.begin(), staging.end());
+}
+
 void ReadThread() {
     char buffer[1024];
 
@@ -192,8 +207,7 @@ void ReadThread() {
 }
 
 template<typename T>
-T* LookupGlobalPointerTo(const char* symbol) {
-    auto addr = reinterpret_cast<void*>(dlsym(RTLD_MAIN_ONLY, symbol));
+T* VerifyGlobalPointerTo(const char* symbol, void* addr) {
     if (!addr) {
         logger.info("'{}' -> nullptr", symbol);
         return nullptr;
@@ -225,8 +239,37 @@ T* LookupGlobalPointerTo(const char* symbol) {
 }
 
 bool Inject() {
-    auto* connections = LookupGlobalPointerTo<std::vector<std::shared_ptr<void>>>("g_connections");
-    auto* mutex = LookupGlobalPointerTo<std::mutex>("g_connections_mutex_ptr");
+    auto machHeader = reinterpret_cast<mach_header_64*>(dlsym(RTLD_MAIN_ONLY, MH_EXECUTE_SYM));
+
+    Dl_info info;
+    if (!dladdr(machHeader, &info)) {
+        logger.error("Failed to find main executable's mach_header");
+        return false;
+    }
+    if (!std::string_view(info.dli_fname).ends_with("lldb-rpc-server")) {
+        logger.error("This doesn't appear to be lldb-rpc-server: {}", info.dli_fname);
+        return false;
+    }
+
+    // Find symbols critical for us
+    auto debugger = SBDebugger::Create(false);
+    auto target = debugger.CreateTarget(nullptr);
+
+    auto mod = target.AddModule(info.dli_fname, nullptr, nullptr);
+
+    auto dlsym = [&](const char* symbol) {
+        auto addr = mod.FindSymbol(symbol).GetStartAddress();
+
+        unsigned long sectionSize = 0;
+        void* sectionAddr = getsectiondata(machHeader, addr.GetSection().GetParent().GetName(), addr.GetSection().GetName(), &sectionSize);
+
+        return reinterpret_cast<void*>(uintptr_t(sectionAddr) + addr.GetOffset());
+    };
+
+    auto* connections = VerifyGlobalPointerTo<std::vector<std::shared_ptr<void>>>("g_connections", dlsym("g_connections"));
+    auto* mutex = VerifyGlobalPointerTo<std::mutex>("g_connections_mutex_ptr", dlsym("g_connections_mutex_ptr"));
+
+    SBDebugger::Destroy(debugger);
 
     if (!connections || !mutex) {
         logger.error("Required symbols for RPC connections not found");
@@ -331,6 +374,9 @@ bool Inject() {
 
             if (sname == kSocketRead) {
                 socketRead = std::exchange(func, reinterpret_cast<void*>(Read));
+            }
+            if (sname == kSocketRead2) {
+                socketRead = std::exchange(func, reinterpret_cast<void*>(Read2));
             }
             if (sname == kSocketIsConnected) {
                 socketIsConnected = std::exchange(func, reinterpret_cast<void*>(IsConnected));
