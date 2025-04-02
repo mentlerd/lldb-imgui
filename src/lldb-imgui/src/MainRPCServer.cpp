@@ -1,10 +1,11 @@
 #include "App.h"
 
-#include "lldb/API/SBDebugger.h"
+#include "lldb/API/LLDB.h"
 
 #include "SDL3/SDL.h"
 
 #include "spdlog/spdlog.h"
+#include "spdlog/sinks/ringbuffer_sink.h"
 
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -92,6 +93,9 @@ void SocketIdleInterrupt() {
 namespace lldb::imgui {
 namespace {
 
+auto loggerBuffer = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(128);
+auto logger = spdlog::logger("Injection", loggerBuffer);
+
 static constexpr std::string_view kSocketVTable = "_ZTVN10rpc_common19RPCConnectionSocketE";
 static constexpr std::string_view kSocketIsConnected = "_ZNK10rpc_common19RPCConnectionSocket11IsConnectedEv";
 static constexpr std::string_view kSocketRead = "_ZN10rpc_common19RPCConnectionSocket4ReadERNSt3__112basic_stringIhNS1_11char_traitsIhEENS1_9allocatorIhEEEEb";
@@ -134,7 +138,6 @@ size_t Read(void* socket, std::string& buffer, bool append) {
     if (g_hijackedReadCalled.load() == false) {
         g_hijackedReadCalled.store(true);
 
-        spdlog::debug("Hijacked Read() called for the first time");
         Init();
     }
 
@@ -192,29 +195,29 @@ template<typename T>
 T* LookupGlobalPointerTo(const char* symbol) {
     auto addr = reinterpret_cast<void*>(dlsym(RTLD_MAIN_ONLY, symbol));
     if (!addr) {
-        spdlog::debug("'{}' -> nullptr", symbol);
+        logger.info("'{}' -> nullptr", symbol);
         return nullptr;
     }
 
     auto value = *reinterpret_cast<void**>(addr);
 
     if (!malloc_zone_from_ptr(value)) {
-        spdlog::debug("'{}' -> {} = {} // not malloc'd!", symbol, addr, value);
+        logger.info("'{}' -> {} = {} // not malloc'd!", symbol, addr, value);
         return nullptr;
     }
 
     size_t actual = malloc_size(value);
-    spdlog::debug("'{}' -> {} = {} // malloc({})", symbol, addr, value, actual);
+    logger.info("'{}' -> {} = {} // malloc({})", symbol, addr, value, actual);
 
     size_t minSize = sizeof(T);
     size_t maxSize = sizeof(T) * 1.5;
 
     if (actual < minSize) {
-        spdlog::debug(" ... expected at least {}", minSize);
+        logger.info(" ... expected at least {}", minSize);
         return nullptr;
     }
     if (actual > maxSize) {
-        spdlog::debug(" ... expected at max {}", maxSize);
+        logger.info(" ... expected at max {}", maxSize);
         return nullptr;
     }
 
@@ -226,7 +229,7 @@ bool Inject() {
     auto* mutex = LookupGlobalPointerTo<std::mutex>("g_connections_mutex_ptr");
 
     if (!connections || !mutex) {
-        spdlog::debug("Required symbols for RPC connections not found");
+        logger.error("Required symbols for RPC connections not found");
         return false;
     }
 
@@ -240,7 +243,7 @@ bool Inject() {
         mach_msg_type_number_t threadsCount;
 
         if (auto err = task_threads(mach_task_self(), &threads, &threadsCount)) {
-            spdlog::debug("Cannot enumerate our threads");
+            logger.error("Cannot enumerate our threads");
             return false;
         }
 
@@ -261,28 +264,28 @@ bool Inject() {
 
     // We expect a single connection which reads from the unix socket shared between the server and Xcode
     if (connections->size() != 1) {
-        spdlog::debug("Unexpected count of connections: {}", connections->size());
+        logger.error("Unexpected count of connections: {}", connections->size());
         return false;
     }
     void* connection = connections->at(0).get();
 
     if (!malloc_zone_from_ptr(connection)) {
-        spdlog::debug("Connection is not heap allocated?!");
+        logger.error("Connection is not heap allocated?!");
         return false;
     }
 
-    spdlog::debug("Scanning for RPCConnectionSocket pointer...");
+    logger.info("Scanning for RPCConnectionSocket pointer...");
     auto asPointers = std::span(reinterpret_cast<void**>(connection), malloc_size(connection) / sizeof(void*));
 
     for(void* pointer : asPointers) {
         if (!malloc_zone_from_ptr(pointer)) {
-            spdlog::debug("- {}: not malloc'd", pointer);
+            logger.info("- {}: not malloc'd", pointer);
             continue;
         }
 
         auto size = malloc_size(pointer);
         if (size < sizeof(void*) + sizeof(int)) {
-            spdlog::debug("- {}: too small ({} bytes)", pointer, size);
+            logger.info("- {}: too small ({} bytes)", pointer, size);
             continue;
         }
 
@@ -290,22 +293,22 @@ bool Inject() {
 
         Dl_info info;
         if (!dladdr(vtablePtr, &info)) {
-            spdlog::debug("- {}: object not virtual/vtable is private", pointer);
+            logger.info("- {}: object not virtual/vtable is private", pointer);
             continue;
         }
         if (std::string_view(info.dli_sname) != kSocketVTable) {
-            spdlog::debug("- {}: object has incorrect vtable ({})", pointer, info.dli_sname);
+            logger.info("- {}: object has incorrect vtable ({})", pointer, info.dli_sname);
             continue;
         }
 
-        spdlog::debug("- {}: RPCConnectionSocket found! ({} bytes)", pointer, size);
+        logger.info("- {}: RPCConnectionSocket found! ({} bytes)", pointer, size);
 
         constexpr auto kSafeSize = 256;
 
         void* newVTablePtr = new char[kSafeSize];
         std::memcpy(newVTablePtr, vtablePtr, kSafeSize);
 
-        spdlog::debug("Creating new vtable...");
+        logger.info("Creating new vtable...");
 
         // Displace key functions
         void* socketRead = nullptr;
@@ -315,16 +318,16 @@ bool Inject() {
             void*& func = reinterpret_cast<void**>(newVTablePtr)[i];
 
             if (!dladdr(func, &info)) {
-                spdlog::debug("- #{} {}: vtable ended. Pointer is not a known symbol", i, func);
+                logger.info("- #{} {}: vtable ended. Pointer is not a known symbol", i, func);
                 break;
             }
             if (func != info.dli_saddr) {
-                spdlog::debug("- #{} {}: vtable ended. Pointer is misaligned from closest symbol '{}'", i, func, info.dli_sname);
+                logger.info("- #{} {}: vtable ended. Pointer is misaligned from closest symbol '{}'", i, func, info.dli_sname);
                 break;
             }
 
             std::string_view sname(info.dli_sname);
-            spdlog::debug("- #{} {}: {}", i, func, sname);
+            logger.info("- #{} {}: {}", i, func, sname);
 
             if (sname == kSocketRead) {
                 socketRead = std::exchange(func, reinterpret_cast<void*>(Read));
@@ -335,15 +338,15 @@ bool Inject() {
         }
 
         if (!socketRead) {
-            spdlog::debug("Failed to find RPCConnectionSocket::Read virtual function");
+            logger.warn("Failed to find RPCConnectionSocket::Read virtual function");
             return;
         }
         if (!socketIsConnected) {
-            spdlog::debug("Failed to find RPCConnectionSocket::IsConnected virtual function");
+            logger.warn("Failed to find RPCConnectionSocket::IsConnected virtual function");
             return;
         }
 
-        spdlog::debug("Scanning for underying file descriptor...");
+        logger.info("Scanning for underying file descriptor...");
 
         auto asInts = std::span(reinterpret_cast<int*>(pointer), size / sizeof(int));
 
@@ -352,15 +355,15 @@ bool Inject() {
 
             struct stat stat;
             if (auto err = fstat(asInts[i], &stat)) {
-                spdlog::debug("- {} is not a file descriptor", fd);
+                logger.info("- {} is not a file descriptor", fd);
                 continue;
             }
             if (!S_ISSOCK(stat.st_mode)) {
-                spdlog::debug("- {} is not a socket", fd);
+                logger.info("- {} is not a socket", fd);
                 continue;
             }
 
-            spdlog::debug("- {} is a socket file descriptor!", fd);
+            logger.info("- {} is a socket file descriptor!", fd);
 
             g_socketFD = fd;
             g_socketFDPtr = &asInts[i];
@@ -368,14 +371,14 @@ bool Inject() {
         }
 
         if (!g_socketFDPtr) {
-            spdlog::debug("Failed to find file descriptor in RPCConnectionSocket");
+            logger.warn("Failed to find file descriptor in RPCConnectionSocket");
             return;
         }
 
         // Spin-up a background thread to read the socket
         std::thread(ReadThread).detach();
 
-        spdlog::debug("Overriding connection vtable");
+        logger.info("Overriding connection vtable");
         vtablePtr = newVTablePtr;
 
         // Dislodge the main thread from the likely ongoing read() operation by sending SIGINT
@@ -385,18 +388,18 @@ bool Inject() {
             sigemptyset(&action.sa_mask);
             action.sa_flags = SA_RESETHAND;
             action.sa_handler = [](int) {
-                spdlog::debug("SIGINT arrived");
+                logger.info("SIGINT arrived");
             };
 
             if (sigaction(SIGINT, &action, nullptr) != 0) {
-                spdlog::debug("Failed to setup sigaction, skipping SIGINT");
+                logger.warn("Failed to setup sigaction, skipping SIGINT");
             } else {
-                spdlog::debug("SIGINT handler installed, interrupting main thread");
+                logger.info("SIGINT handler installed, interrupting main thread");
 
                 pthread_t mainThread = pthread_from_mach_thread_np(mainThreadPort);
 
                 if (auto err = pthread_kill(mainThread, SIGINT)) {
-                    spdlog::debug("Failed to send SIGINT: {}", err);
+                    logger.warn("Failed to send SIGINT: {}", err);
                 }
             }
         }
@@ -404,11 +407,11 @@ bool Inject() {
         // Wake the main thread
         mainThreadSuspension.reset();
 
-        spdlog::debug("Injection complete");
+        logger.info("Injection complete");
         return true;
     }
 
-    spdlog::debug("RPCConnectionSocket not found, injection failed!");
+    logger.error("RPCConnectionSocket not found, injection failed!");
     return false;
 }
 
@@ -419,8 +422,24 @@ namespace lldb {
 
 #define API __attribute__((used))
 
+struct InjectionLogsCommand : public lldb::SBCommandPluginInterface {
+    bool DoExecute(lldb::SBDebugger debugger, char** command, lldb::SBCommandReturnObject& result) override {
+        for (auto line : imgui::loggerBuffer->last_formatted()) {
+            result.AppendMessage(line.c_str());
+        }
+        return false;
+    }
+};
+
 API bool PluginInitialize(lldb::SBDebugger debugger) {
     static bool s_success = lldb::imgui::Inject();
+
+    if (!s_success) {
+        static const char* kCommand = "imgui-injection-logs";
+
+        debugger.GetCommandInterpreter().AddCommand(kCommand, new InjectionLogsCommand(), "Displays injection logs of lldb-imgui");
+        debugger.HandleCommand(kCommand);
+    }
 
     return s_success;
 }
