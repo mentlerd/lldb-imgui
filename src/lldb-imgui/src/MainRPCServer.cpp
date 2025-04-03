@@ -1,5 +1,7 @@
 #include "App.h"
 
+#include "Expose.h"
+
 #include "lldb/API/LLDB.h"
 
 #include "SDL3/SDL.h"
@@ -207,7 +209,8 @@ void ReadThread() {
 }
 
 template<typename T>
-T* VerifyGlobalPointerTo(const char* symbol, void* addr) {
+T* FindGlobalPointerTo(const char* symbol) {
+    void* addr = Expose(symbol);
     if (!addr) {
         logger.info("'{}' -> nullptr", symbol);
         return nullptr;
@@ -251,25 +254,8 @@ bool Inject() {
         return false;
     }
 
-    // Find symbols critical for us
-    auto debugger = SBDebugger::Create(false);
-    auto target = debugger.CreateTarget(nullptr);
-
-    auto mod = target.AddModule(info.dli_fname, nullptr, nullptr);
-
-    auto dlsym = [&](const char* symbol) {
-        auto addr = mod.FindSymbol(symbol).GetStartAddress();
-
-        unsigned long sectionSize = 0;
-        void* sectionAddr = getsectiondata(machHeader, addr.GetSection().GetParent().GetName(), addr.GetSection().GetName(), &sectionSize);
-
-        return reinterpret_cast<void*>(uintptr_t(sectionAddr) + addr.GetOffset());
-    };
-
-    auto* connections = VerifyGlobalPointerTo<std::vector<std::shared_ptr<void>>>("g_connections", dlsym("g_connections"));
-    auto* mutex = VerifyGlobalPointerTo<std::mutex>("g_connections_mutex_ptr", dlsym("g_connections_mutex_ptr"));
-
-    SBDebugger::Destroy(debugger);
+    auto* connections = FindGlobalPointerTo<std::vector<std::shared_ptr<void>>>("g_connections");
+    auto* mutex = FindGlobalPointerTo<std::mutex>("g_connections_mutex_ptr");
 
     if (!connections || !mutex) {
         logger.error("Required symbols for RPC connections not found");

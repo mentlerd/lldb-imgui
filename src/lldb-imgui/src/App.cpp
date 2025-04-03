@@ -6,6 +6,8 @@
 
 #include "spdlog/spdlog.h"
 
+#include "Expose.h"
+
 /// PLANS:
 ///
 /// - Standalone app
