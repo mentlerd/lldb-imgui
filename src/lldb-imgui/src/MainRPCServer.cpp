@@ -459,27 +459,37 @@ namespace lldb {
 
 #define API __attribute__((used))
 
-struct InjectionLogsCommand : public lldb::SBCommandPluginInterface {
+struct InitCommand : public lldb::SBCommandPluginInterface {
     bool DoExecute(lldb::SBDebugger debugger, char** command, lldb::SBCommandReturnObject& result) override {
-        for (auto line : imgui::loggerBuffer->last_formatted()) {
-            result.AppendMessage(line.c_str());
+        if (debugger.GetNumTargets() == 0) {
+            result.AppendWarning("Due to an unknown bug lldb-imgui freezes the RPC server when initialized without a target. Refusing to load");
+            return false;
         }
+
+        static bool injected = lldb::imgui::Inject();
+
+        if (!injected) {
+            result.AppendWarning("Takeover of lldb-rpc-server's main thread failed!");
+            result.AppendWarning("Injection logs:");
+
+            for (auto line : imgui::loggerBuffer->last_formatted()) {
+                result.AppendMessage(line.c_str());
+            }
+        }
+
+        lldb::imgui::RequestForegroundMode();
         return false;
     }
 };
 
 API bool PluginInitialize(lldb::SBDebugger debugger) {
-    static bool s_success = lldb::imgui::Inject();
+    auto command = debugger.GetCommandInterpreter().AddMultiwordCommand("imgui", "lldb-imgui's root command");
 
-    if (!s_success) {
-        static const char* kCommand = "imgui-injection-logs";
+    command.AddCommand("init", new InitCommand(), "Take over lldb-rpc-server and start lldb-imgui");
 
-        debugger.GetCommandInterpreter().AddCommand(kCommand, new InjectionLogsCommand(), "Displays injection logs of lldb-imgui");
-        debugger.HandleCommand(kCommand);
-        return false;
+    if (debugger.GetNumTargets() != 0) {
+        debugger.HandleCommand("imgui init");
     }
-
-    lldb::imgui::RequestForegroundMode();
     return true;
 }
 
