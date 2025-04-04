@@ -116,6 +116,10 @@ SDL_AppResult App::Init(std::span<const std::string_view> args) {
     };
     ImGui_ImplSDLGPU3_Init(&initInfo);
 
+    // Raise the newly created window for the sake of RPC main, where this doesnt
+    // happen automatically the second time we enter foreground mode
+    SDL_RaiseWindow(_window);
+
     return SDL_APP_CONTINUE;
 }
 

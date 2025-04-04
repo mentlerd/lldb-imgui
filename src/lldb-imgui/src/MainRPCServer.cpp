@@ -9,6 +9,8 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/ringbuffer_sink.h"
 
+#include <ApplicationServices/ApplicationServices.h>
+
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <malloc/malloc.h>
@@ -27,67 +29,79 @@
 namespace lldb::imgui {
 namespace {
 
-Uint32 g_interruptEvent;
+const std::array<std::string_view, 0> kNoArgs;
+
+const SDL_Event kForegroundModeRequest {
+    .type = SDL_RegisterEvents(1),
+};
+const SDL_Event kInterruptIdleEvent {
+    .type = SDL_RegisterEvents(1),
+};
+
+const ProcessSerialNumber kThisProcess = { 0, kCurrentProcess };
 
 std::unique_ptr<App> g_app;
-SDL_AppResult g_appState;
 
-void Quit() {
-    g_app->Quit();
-    g_app.reset();
-
+void EnterBackgroundMode() {
+    if (g_app) {
+        g_app->Quit();
+        g_app.reset();
+    }
     SDL_Quit();
+
+    TransformProcessType(&kThisProcess, kProcessTransformToBackgroundApplication);
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+
+    SDL_InitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO);
+    SDL_CreateWindow("EventPump", 100, 100, SDL_WINDOW_HIDDEN);
 }
-void Init() {
-    g_interruptEvent = SDL_RegisterEvents(1);
 
-    g_app = std::make_unique<App>();
-    g_appState = g_app->Init({});
-
-    if (g_appState != SDL_APP_CONTINUE) {
-        Quit();
+void EnterForegroundMode() {
+    if (g_app) {
         return;
     }
+    SDL_Quit();
 
-    if (!SDL_InitSubSystem(SDL_INIT_EVENTS)) {
-        Quit();
+    TransformProcessType(&kThisProcess, kProcessTransformToForegroundApplication);
+    SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+
+    g_app = std::make_unique<App>();
+
+    if (g_app->Init(kNoArgs) != SDL_APP_CONTINUE) {
+        EnterBackgroundMode();
     }
 }
 
 void SocketIdle() {
-    if (g_app == nullptr) {
-        return;
-    }
-
     SDL_Event event;
 
     while (true) {
         if (!SDL_WaitEvent(&event)) {
-            break;
+            std::terminate();
         }
-        if (event.type == g_interruptEvent) {
+        if (event.type == kInterruptIdleEvent.type) {
             return;
         }
-
-        g_appState = g_app->Event(event);
-        if (g_appState != SDL_APP_CONTINUE) {
-            break;
+        if (event.type == kForegroundModeRequest.type && !g_app) {
+            EnterForegroundMode();
+            continue;
         }
 
-        g_appState = g_app->Iterate();
-        if (g_appState != SDL_APP_CONTINUE) {
-            break;
+        if (g_app && g_app->Event(event) != SDL_APP_CONTINUE) {
+            EnterBackgroundMode();
+        }
+        if (g_app && g_app->Iterate() != SDL_APP_CONTINUE) {
+            EnterBackgroundMode();
         }
     }
-
-    Quit();
 }
 
 void SocketIdleInterrupt() {
-    SDL_Event event {
-        .type = g_interruptEvent
-    };
-    SDL_PushEvent(&event);
+    SDL_PushEvent(const_cast<SDL_Event*>(&kInterruptIdleEvent));
+}
+
+void RequestForegroundMode() {
+    SDL_PushEvent(const_cast<SDL_Event*>(&kForegroundModeRequest));
 }
 
 }
@@ -113,8 +127,6 @@ int* g_socketFDPtr = nullptr;
 std::atomic<bool> g_hijackedReadCalled;
 
 std::mutex g_readBufferMutex;
-std::condition_variable g_readBufferDataAvailable;
-
 std::string g_readBuffer;
 
 bool IsConnected(void* socket) {
@@ -145,19 +157,13 @@ size_t Read(void* socket, std::string& buffer, bool append) {
     if (g_hijackedReadCalled.load() == false) {
         g_hijackedReadCalled.store(true);
 
-        Init();
+        EnterForegroundMode();
     }
 
     while (true) {
         std::string data;
         {
             std::unique_lock lock(g_readBufferMutex);
-
-            if (g_app) {
-                g_readBufferDataAvailable.wait_for(lock, std::chrono::milliseconds(0));
-            } else {
-                g_readBufferDataAvailable.wait(lock);
-            }
 
             data = std::exchange(g_readBuffer, std::string());
         }
@@ -200,7 +206,6 @@ void ReadThread() {
         {
             std::scoped_lock lock(g_readBufferMutex);
 
-            g_readBufferDataAvailable.notify_one();
             g_readBuffer.append(std::string_view(buffer, n_read));
         }
 
@@ -471,9 +476,11 @@ API bool PluginInitialize(lldb::SBDebugger debugger) {
 
         debugger.GetCommandInterpreter().AddCommand(kCommand, new InjectionLogsCommand(), "Displays injection logs of lldb-imgui");
         debugger.HandleCommand(kCommand);
+        return false;
     }
 
-    return s_success;
+    lldb::imgui::RequestForegroundMode();
+    return true;
 }
 
 } // namespace lldb

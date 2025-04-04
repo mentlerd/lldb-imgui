@@ -32,6 +32,7 @@ set_target_properties(${target} PROPERTIES
 # Include support to act as an LLDB plugin in Xcode's lldb-rpc-server
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
     target_sources(${target} PRIVATE src/MainRPCServer.cpp)
+    target_link_libraries(${target} PRIVATE "-framework AppKit")
 endif()
 
 #
