@@ -1,12 +1,18 @@
 #include "App.h"
 
+#include "lldb/API/LLDB.h"
+
+#include "SDL3/SDL_loadso.h"
+
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlgpu3.h"
 
 #include "spdlog/spdlog.h"
 
-#include "Expose.h"
+#include <filesystem>
+#include <algorithm>
 
 /// PLANS:
 ///
@@ -24,6 +30,292 @@
 ///   - Plugin perf sampler
 
 namespace lldb::imgui {
+
+using PluginID = uint32_t;
+
+struct Plugin {
+    std::filesystem::path path;
+
+    bool isEnabled = false;
+    bool isAutoReload = false;
+
+    SDL_SharedObject* sharedObject = nullptr;
+    SDL_Time lastModified = 0;
+
+    enum class State {
+        Ready,
+        FailedToLoad,
+        Loaded,
+        Unloaded
+    };
+    State state;
+    std::string message;
+
+    struct DSO {
+        void (*draw)() = nullptr;
+        void (*drawDebugger)(lldb::SBDebugger&) = nullptr;
+
+        template<typename T>
+        static void Load(SDL_SharedObject* so, T& field, const char* name) {
+            field = reinterpret_cast<T>(SDL_LoadFunction(so, name));
+        }
+        
+        void Load(SDL_SharedObject* so) {
+            Load(so, draw, "_Z4Drawv");
+            Load(so, drawDebugger, "_DrawDebugger");
+        }
+    } dso;
+
+    void SetState(State state, std::string_view message = "") {
+        this->state = state;
+        this->message = message;
+    }
+
+    void Update() {
+        if (state == State::Ready) {
+            SDL_UnloadObject(sharedObject);
+
+            sharedObject = nullptr;
+            dso = {};
+
+            if (!isEnabled) {
+                return SetState(State::Unloaded);
+            }
+
+            sharedObject = SDL_LoadObject(path.c_str());
+
+            if (!sharedObject) {
+                return SetState(State::FailedToLoad, SDL_GetError());
+            }
+
+            dso.Load(sharedObject);
+
+            SDL_PathInfo info;
+            SDL_GetPathInfo(path.c_str(), &info);
+
+            lastModified = info.modify_time;
+            return SetState(State::Loaded);
+        }
+        if (state == State::Loaded && !isEnabled) {
+            SDL_UnloadObject(sharedObject);
+
+            sharedObject = nullptr;
+            dso = {};
+
+            return SetState(State::Unloaded);
+        }
+        if (state == State::Unloaded && isEnabled) {
+            return SetState(State::Ready);
+        }
+
+        if (state != State::Unloaded && isAutoReload) {
+            SDL_PathInfo info;
+            SDL_GetPathInfo(path.c_str(), &info);
+
+            if (lastModified < info.modify_time) {
+                return SetState(State::Ready, "Out-of-date");
+            }
+        }
+    }
+};
+
+class App::PluginHandler {
+    static bool StripPrefix(std::string_view& from, std::string_view prefix) {
+        if (!from.starts_with(prefix)) {
+            return false;
+        }
+
+        from = from.substr(prefix.size());
+        return true;
+    }
+
+    std::unordered_map<PluginID, Plugin> _plugins;
+
+    void SaveIniSettingsNow() {
+        ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
+    }
+
+    void DrawPluginMenuItem(PluginID id, Plugin& plugin) {
+        using namespace ImGui;
+
+        auto name = plugin.path.filename().generic_string();
+
+        if (!BeginMenu(name.c_str())) {
+            return;
+        }
+
+        TextDisabled("Path: %s", plugin.path.c_str());
+
+        std::string state;
+        switch (plugin.state) {
+            case Plugin::State::Ready:
+                state = "Ready";
+                break;
+            case Plugin::State::FailedToLoad:
+                state = "FailedToLoad";
+                break;
+            case Plugin::State::Loaded:
+                state = "Loaded";
+                break;
+            case Plugin::State::Unloaded:
+                state = "Unloaded";
+                break;
+        }
+        if (!plugin.message.empty()) {
+            state.append(" (").append(plugin.message).append(")");
+        }
+        TextDisabled("State: %s", state.c_str());
+
+        if (Checkbox("Enabled", &plugin.isEnabled)) {
+            SaveIniSettingsNow();
+        }
+        if (Checkbox("AutoReload", &plugin.isAutoReload)) {
+            SaveIniSettingsNow();
+        }
+        if (Button("Remove")) {
+            _plugins.erase(id);
+            SaveIniSettingsNow();
+        }
+
+        EndMenu();
+    }
+
+    void DrawPluginsMenu() {
+        using namespace ImGui;
+
+        // Draw plugins in alphabetical order
+        struct Entry {
+            std::string name;
+            PluginID key;
+
+            auto operator<=>(const Entry&) const = default;
+        };
+        std::vector<Entry> plugins;
+
+        for (auto& [key, plugin] : _plugins) {
+            plugins.push_back(Entry{
+                .name = plugin.path.stem().generic_string(),
+                .key = key,
+            });
+        }
+        std::sort(plugins.begin(), plugins.end());
+
+        if (plugins.empty()) {
+            TextDisabled("None");
+        }
+        for (Entry& entry : plugins) {
+            DrawPluginMenuItem(entry.key, _plugins.at(entry.key));
+        }
+
+        Separator();
+        if (MenuItem("Add")) {
+            static std::array kFilters = {
+                SDL_DialogFileFilter {
+                    .name = "LLDB ImGui plugin",
+                    .pattern = "so",
+                },
+            };
+
+            SDL_DialogFileCallback completion = [](void *userdata, const char* const *filelist, int filter) {
+                if (!filelist || !filelist[0]) {
+                    return;
+                }
+
+                reinterpret_cast<PluginHandler*>(userdata)->AddPlugin(filelist[0]);
+            };
+            SDL_ShowOpenFileDialog(completion, this, _window, kFilters.data(), kFilters.size(), nullptr, false);
+        }
+    }
+
+    void AddPlugin(std::filesystem::path path) {
+        PluginID newID = 0;
+
+        for (const auto& [id, plugin] : _plugins) {
+            if (plugin.path == path) {
+                return;
+            }
+            newID = std::max(newID, id);
+        }
+
+        _plugins[newID] = Plugin {
+            .path = path,
+        };
+        SaveIniSettingsNow();
+    }
+
+    SDL_Window* _window;
+
+public:
+    PluginHandler(SDL_Window* window)
+    : _window(window)
+    {
+        ImGuiSettingsHandler handler;
+
+        handler.TypeName = "Plugins";
+        handler.TypeHash = ImHashStr(handler.TypeName);
+        handler.UserData = this;
+
+        handler.ReadOpenFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, const char* name) -> void* {
+            auto* impl = reinterpret_cast<PluginHandler*>(handler->UserData);
+
+            return &impl->_plugins[atoi(name)];
+        };
+        handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, void* ptr, const char* rawLine) {
+            auto* plugin = reinterpret_cast<Plugin*>(ptr);
+
+            std::string_view line = rawLine;
+
+            if (StripPrefix(line, "path=")) {
+                plugin->path = line;
+            } else if (StripPrefix(line, "isEnabled=1")) {
+                plugin->isEnabled = true;
+            } else if (StripPrefix(line, "isAutoReload=1")) {
+                plugin->isAutoReload = true;
+            }
+        };
+        handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* handler, ImGuiTextBuffer* buffer) {
+            auto* impl = reinterpret_cast<PluginHandler*>(handler->UserData);
+
+            for (const auto& [key, plugin] : impl->_plugins) {
+                buffer->appendf("[%s][%d]\n", handler->TypeName, key);
+
+                buffer->appendf("path=%s\n", plugin.path.c_str());
+                buffer->appendf("isEnabled=%d\n", plugin.isEnabled);
+                buffer->appendf("isAutoReload=%d\n", plugin.isAutoReload);
+            }
+        };
+
+        ImGui::AddSettingsHandler(&handler);
+        ImGui::LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
+    }
+    ~PluginHandler() {
+        ImGui::RemoveSettingsHandler("Plugins");
+    }
+
+    void Draw() {
+        using namespace ImGui;
+
+        if (BeginMainMenuBar()) {
+            if (BeginMenu("Plugins")) {
+                DrawPluginsMenu();
+                EndMenu();
+            }
+            EndMainMenuBar();
+        }
+
+        for (auto& [_, plugin] : _plugins) {
+            plugin.Update();
+
+            if (plugin.dso.draw) {
+                plugin.dso.draw();
+            }
+        }
+    }
+
+    void Draw(lldb::SBDebugger& debugger) {
+
+    }
+};
 
 static void LogAdapter(void* userdata, int rawCategory, SDL_LogPriority priority, const char* message) {
     using namespace spdlog;
@@ -79,6 +371,9 @@ bool App::EventWatch(void* userdata, SDL_Event* event) {
     return true;
 }
 
+App::App() = default;
+App::~App() = default;
+
 SDL_AppResult App::Init(std::span<const std::string_view> args) {
     SDL_SetLogOutputFunction(LogAdapter, nullptr);
 
@@ -103,6 +398,9 @@ SDL_AppResult App::Init(std::span<const std::string_view> args) {
 
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+        // TODO: Find a way to make these assertions continuable, and they'll be great!
+        io.ConfigErrorRecoveryEnableAssert = false;
     }
     ImGui::StyleColorsDark();
 
@@ -119,6 +417,8 @@ SDL_AppResult App::Init(std::span<const std::string_view> args) {
     // Raise the newly created window for the sake of RPC main, where this doesnt
     // happen automatically the second time we enter foreground mode
     SDL_RaiseWindow(_window);
+
+    _pluginHandler = std::make_unique<PluginHandler>(_window);
 
     return SDL_APP_CONTINUE;
 }
@@ -149,6 +449,8 @@ SDL_AppResult App::Event(const SDL_Event& event) {
 }
 
 void App::Quit() {
+    _pluginHandler.reset();
+
     SDL_WaitForGPUIdle(_gpu);
 
     ImGui_ImplSDL3_Shutdown();
@@ -168,7 +470,9 @@ void App::Draw() {
     ImGui_ImplSDL3_NewFrame();
 
     ImGui::NewFrame();
-    ImGui::ShowDemoWindow();
+
+    _pluginHandler->Draw();
+
     ImGui::EndFrame();
 
     // Rendering

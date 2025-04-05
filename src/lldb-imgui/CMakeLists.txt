@@ -9,13 +9,17 @@ file(GLOB sources CONFIGURE_DEPENDS
 add_executable(${target} 
     ${sources}
 )
-target_link_libraries(${target} PRIVATE
-    ImGui
-    ImGui_Backend
-    spdlog
-    XcodeLLDB
+target_link_libraries(${target} 
+    PUBLIC
+        ImGui
+        spdlog
+        XcodeLLDB
+
+    PRIVATE
+        ImGui_Backend
 )
 set_target_properties(${target} PROPERTIES
+    ENABLE_EXPORTS TRUE
 	MACOSX_BUNDLE TRUE
 
     MACOSX_BUNDLE_GUI_IDENTIFIER "com.mentlerd.lldb-imgui.app"

@@ -15,6 +15,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 add_subdirectory(libs)
 
 add_subdirectory(src/lldb-imgui)
+add_subdirectory(src/plugin-imgui-demo)
 
 add_subdirectory(src/AppDummy)
 add_subdirectory(src/HostXcode)
