@@ -5,7 +5,6 @@ file(GLOB sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.cpp"
 )
-list(REMOVE_ITEM sources "${CMAKE_CURRENT_SOURCE_DIR}/src/MainRPCServer.cpp")
 
 add_executable(${target} 
     ${sources}
@@ -31,7 +30,7 @@ set_target_properties(${target} PROPERTIES
 
 # Include support to act as an LLDB plugin in Xcode's lldb-rpc-server
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    target_sources(${target} PRIVATE src/MainRPCServer.cpp)
+    target_sources(${target} PRIVATE src/MainRPCServer.mm)
     target_link_libraries(${target} PRIVATE "-framework AppKit")
 endif()
 

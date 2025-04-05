@@ -1,5 +1,4 @@
 #include "App.h"
-
 #include "Expose.h"
 
 #include "lldb/API/LLDB.h"
@@ -9,18 +8,18 @@
 #include "spdlog/spdlog.h"
 #include "spdlog/sinks/ringbuffer_sink.h"
 
-#include <ApplicationServices/ApplicationServices.h>
+#include <AppKit/AppKit.h>
 
 #include <dlfcn.h>
 #include <sys/stat.h>
 #include <malloc/malloc.h>
 #include <mach/mach.h>
 #include <mach-o/dyld.h>
-#include <mach-o/getsect.h>
 #include <mach-o/ldsyms.h>
 #include <signal.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <vector>
 #include <thread>
 #include <span>
@@ -41,6 +40,60 @@ const SDL_Event kInterruptIdleEvent {
 const ProcessSerialNumber kThisProcess = { 0, kCurrentProcess };
 
 std::unique_ptr<App> g_app;
+
+void SetAppIcon() {
+    // We are running outside of the bundle, but can use the executable's location to find the icon file
+    Dl_info info;
+    if (dladdr(&_mh_execute_header, &info) == 0) {
+        return;
+    }
+
+    std::filesystem::path executable = info.dli_fname;
+    std::filesystem::path icns = executable.parent_path().parent_path() / "Resources" / "AppIcon.icns";
+
+    // Take the normal app icon
+    auto appIcon = [[NSImage alloc] initWithContentsOfFile: [NSString stringWithUTF8String:icns.c_str()]];
+
+    // And make an alternate version with overlaid text
+    auto altIconDrawingHandler = ^BOOL (NSRect rect) {
+        [appIcon drawInRect:rect];
+
+        // Gray background pill
+        CGFloat width = 72.0;
+        CGFloat height = 32.0;
+        CGFloat radius = 4.0;
+        CGFloat margin = 4.0;
+
+        auto pill = CGRectMake(rect.size.width - width - margin,
+                               rect.size.height - height - margin,
+                               width,
+                               height);
+
+        [NSColor.darkGrayColor setFill];
+        [[NSBezierPath bezierPathWithRoundedRect:pill xRadius:radius yRadius:radius] fill];
+
+        // "RPC" label in the middle of the pill
+        auto labelAttribs = @{
+            NSFontAttributeName: [NSFont systemFontOfSize:22.0 weight:NSFontWeightBold],
+            NSForegroundColorAttributeName: NSColor.whiteColor,
+        };
+        auto label = [[NSAttributedString alloc] initWithString:@"RPC" attributes:labelAttribs];
+
+        auto bounds = [label boundingRectWithSize:pill.size options:0];
+        auto centered = CGRectMake(pill.origin.x + (pill.size.width - bounds.size.width) / 2.0,
+                                   pill.origin.y + (pill.size.height - bounds.size.height) / 2.0,
+                                   bounds.size.width,
+                                   bounds.size.height);
+
+        [label drawInRect:centered];
+        return true;
+    };
+    auto altIcon = [NSImage imageWithSize:CGSizeMake(128, 128)
+                                  flipped:true
+                           drawingHandler:altIconDrawingHandler];
+
+    [NSApplication sharedApplication].applicationIconImage = altIcon;
+}
 
 void EnterBackgroundMode() {
     if (g_app) {
@@ -70,6 +123,8 @@ void EnterForegroundMode() {
     if (g_app->Init(kNoArgs) != SDL_APP_CONTINUE) {
         EnterBackgroundMode();
     }
+
+    SetAppIcon();
 }
 
 void SocketIdle() {
