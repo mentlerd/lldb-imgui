@@ -127,6 +127,21 @@ void EnterForegroundMode() {
     SetAppIcon();
 }
 
+void AddDebugger(lldb::SBDebugger debugger) {
+    auto ptr = new SBDebugger(debugger);
+
+    SDL_RunOnMainThread([](void* raw) {
+        auto* ptr = reinterpret_cast<SBDebugger*>(raw);
+
+        if (g_app) {
+            g_app->AddDebugger(*ptr);
+        } else {
+            std::terminate();
+        }
+        delete ptr;
+    }, ptr, false);
+}
+
 void SocketIdle() {
     SDL_Event event;
 
@@ -210,9 +225,9 @@ bool IsConnected(void* socket) {
 
 size_t Read(void* socket, std::string& buffer, bool append) {
     if (g_hijackedReadCalled.load() == false) {
-        g_hijackedReadCalled.store(true);
-
         EnterForegroundMode();
+
+        g_hijackedReadCalled.store(true);
     }
 
     while (true) {
@@ -499,6 +514,10 @@ bool Inject() {
         // Wake the main thread
         mainThreadSuspension.reset();
 
+        while (!g_hijackedReadCalled.load()) {
+            usleep(10);
+        }
+
         logger.info("Injection complete");
         return true;
     }
@@ -533,6 +552,7 @@ struct InitCommand : public lldb::SBCommandPluginInterface {
         }
 
         lldb::imgui::RequestForegroundMode();
+        lldb::imgui::AddDebugger(debugger);
         return false;
     }
 };

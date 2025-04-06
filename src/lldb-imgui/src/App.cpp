@@ -62,7 +62,7 @@ struct Plugin {
         
         void Load(SDL_SharedObject* so) {
             Load(so, draw, "_Z4Drawv");
-            Load(so, drawDebugger, "_DrawDebugger");
+            Load(so, drawDebugger, "_Z12DrawDebuggerRN4lldb10SBDebuggerE");
         }
     } dso;
 
@@ -313,7 +313,11 @@ public:
     }
 
     void Draw(lldb::SBDebugger& debugger) {
-
+        for (auto& [_, plugin] : _plugins) {
+            if (plugin.dso.drawDebugger) {
+                plugin.dso.drawDebugger(debugger);
+            }
+        }
     }
 };
 
@@ -465,6 +469,10 @@ void App::Quit() {
     SDL_QuitSubSystem(SDL_INIT_EVENTS | SDL_INIT_VIDEO | SDL_INIT_GAMEPAD);
 }
 
+void App::AddDebugger(SBDebugger& debugger) {
+    _debuggers.push_back(debugger);
+}
+
 void App::Draw() {
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
@@ -472,6 +480,12 @@ void App::Draw() {
     ImGui::NewFrame();
 
     _pluginHandler->Draw();
+
+    std::erase_if(_debuggers, [&](auto& debugger) {
+        _pluginHandler->Draw(debugger);
+
+        return !debugger.IsValid();
+    });
 
     ImGui::EndFrame();
 

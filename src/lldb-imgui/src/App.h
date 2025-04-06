@@ -5,6 +5,13 @@
 #include <unordered_map>
 #include <string_view>
 #include <span>
+#include <vector>
+
+namespace lldb {
+
+class SBDebugger;
+
+}
 
 namespace lldb::imgui {
 
@@ -18,6 +25,8 @@ public:
     SDL_AppResult Event(const SDL_Event& event);
     void Quit();
 
+    void AddDebugger(SBDebugger& debugger);
+
 private:
     static bool EventWatch(void* userdata, SDL_Event* event);
 
@@ -28,6 +37,8 @@ private:
 
     class PluginHandler;
     std::unique_ptr<PluginHandler> _pluginHandler;
+
+    std::vector<SBDebugger> _debuggers;
 };
 
 }
