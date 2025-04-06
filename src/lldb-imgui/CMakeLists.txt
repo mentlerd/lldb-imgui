@@ -4,7 +4,9 @@ set(target lldb-imgui)
 file(GLOB sources CONFIGURE_DEPENDS 
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/**/*.mm"
 )
+list(REMOVE_ITEM sources "${CMAKE_CURRENT_SOURCE_DIR}/src/MainRPCServer.mm")
 
 add_executable(${target} 
     ${sources}

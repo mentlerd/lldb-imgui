@@ -24,9 +24,12 @@ T* Expose(const char* symbol) {
 #define EXPOSE(NAME)                                                                 \
     extern "C" {                                                                     \
         __attribute__((section("__CONST,exposed_symbols")))                          \
-        static const char* NAME##_symbol = #NAME;                                    \
+        __attribute__((internal_linkage))                                            \
+        static const char NAME##_symbol[] = #NAME;                                   \
                                                                                      \
+        __attribute__((internal_linkage))                                            \
         void* NAME##_addr = lldb::imgui::Expose(NAME##_symbol);                      \
+                                                                                     \
         void* NAME##_resolver() {                                                    \
             __asm__ volatile("mov x16,x8");                                          \
             auto tmp = NAME##_addr;                                                  \

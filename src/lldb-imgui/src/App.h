@@ -1,6 +1,9 @@
 #pragma once
 
-#include "SDL3/SDL.h"
+#include "PluginLoader.h"
+
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_gpu.h"
 
 #include <unordered_map>
 #include <string_view>
@@ -37,6 +40,7 @@ private:
 
     class PluginHandler;
     std::unique_ptr<PluginHandler> _pluginHandler;
+    std::unique_ptr<PluginLoader> _pluginLoader;
 
     std::vector<SBDebugger> _debuggers;
 };
