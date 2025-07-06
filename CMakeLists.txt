@@ -18,9 +18,3 @@ add_subdirectory(src/lldb-imgui)
 add_subdirectory(src/plugin-imgui-demo)
 
 add_subdirectory(src/AppDummy)
-add_subdirectory(src/HostXcode)
-add_subdirectory(src/Plugin)
-
-# While technically not related, it is very useful to keep the host
-# and plugin libs up-to-date for each dummy app launch
-add_dependencies(AppDummy HostXcode Plugin)
