@@ -36,19 +36,32 @@ target_link_libraries(ImGui_Backend PUBLIC
 
 # =====/ Xcode's LLDB.framework /========================================
 
-# LLDB.framework no longer contains public headers for the SB API, but the symbols are still exported. 
-# Use the installed LLVM headers, and be very careful :)
-find_package(llvm REQUIRED config)
+if (XCODE)
+    add_library(XcodeLLDB INTERFACE)
 
-add_library(XcodeLLDB INTERFACE)
+    # Infer the current Xcode's LLDB.framework location from the compiler
+    string(REGEX REPLACE 
+        "/Contents/Developer/Toolchains/.*" 
+        "/Contents/SharedFrameworks/LLDB.framework/LLDB"
+        xcode_lldb
+        "${CMAKE_CXX_COMPILER}"
+    )
+    if (NOT EXISTS "${xcode_lldb}")
+        message(SEND_ERROR "Failed to find Xcode's LLDB framework at '${xcode_lldb}'")
+    endif()
 
-target_include_directories(XcodeLLDB INTERFACE
-	"${LLVM_INCLUDE_DIRS}"
-)
-target_link_libraries(XcodeLLDB INTERFACE 
-	"/Applications/Xcode_16.2.app/Contents/SharedFrameworks/LLDB.framework/Versions/A/LLDB"
-)
+    target_link_libraries(XcodeLLDB INTERFACE "${xcode_lldb}")    
 
+    # LLDB.framework doesn't contains public headers for the SB API, but the symbols 
+    # are still exported. Use the installed LLVM headers, and hope for the best..
+    find_package(llvm REQUIRED config)
+
+    target_include_directories(XcodeLLDB INTERFACE
+        "${LLVM_INCLUDE_DIRS}"
+    )    
+endif()
+
+# =====/ Postprocessing /========================================
 
 # Move all targets added into a separate IDE directory
 macro(_tweakTargetsRecursive dir)
