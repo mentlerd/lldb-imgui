@@ -182,8 +182,16 @@ void RequestForegroundMode() {
 namespace lldb::imgui {
 namespace {
 
-auto loggerBuffer = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(128);
-auto logger = spdlog::logger("Injection", loggerBuffer);
+auto loggerBuffer = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(1024);
+auto logger = [] {
+    auto logger = spdlog::logger("Injection", loggerBuffer);
+    
+    logger.set_level(spdlog::level::trace);
+    logger.flush_on(spdlog::level::trace);
+    logger.set_pattern("%L: %v");
+    
+    return logger;
+}();
 
 static constexpr std::string_view kSocketVTable = "_ZTVN10rpc_common19RPCConnectionSocketE";
 static constexpr std::string_view kSocketIsConnected = "_ZNK10rpc_common19RPCConnectionSocket11IsConnectedEv";
@@ -211,7 +219,9 @@ bool IsConnected(void* socket) {
     if (!dladdr(caller, &info)) {
         std::terminate();
     }
-    if (std::string_view(info.dli_sname) == kSocketRead) {
+    std::string_view callerName(info.dli_sname);
+    
+    if (callerName == kSocketRead || callerName == kSocketRead2) {
         // We are called from the original `Read()` function which we are trying
         // to escape. Pretend that the socket is closed
         *g_socketFDPtr = -1;
@@ -317,7 +327,7 @@ T* FindGlobalPointerTo(const char* symbol) {
 }
 
 bool Inject() {
-    auto machHeader = reinterpret_cast<mach_header_64*>(dlsym(RTLD_MAIN_ONLY, MH_EXECUTE_SYM));
+    auto machHeader = reinterpret_cast<const mach_header_64*>(_dyld_get_image_header(0));
 
     Dl_info info;
     if (!dladdr(machHeader, &info)) {
@@ -549,6 +559,7 @@ struct InitCommand : public lldb::SBCommandPluginInterface {
             for (auto line : imgui::loggerBuffer->last_formatted()) {
                 result.AppendMessage(line.c_str());
             }
+            return false;
         }
 
         lldb::imgui::RequestForegroundMode();

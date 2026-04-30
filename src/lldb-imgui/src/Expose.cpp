@@ -102,7 +102,7 @@ static SBTarget CreateSelfReflection() {
     loadModuleWithAddr("lldb", (void*) SBDebugger::Initialize);
 
     // Reflect on host executable if it isn't us
-    if (auto* header = dlsym(RTLD_MAIN_ONLY, MH_EXECUTE_SYM)) {
+    if (auto* header = (void*) _dyld_get_image_header(0)) {
         if (header != &_mh_execute_header) {
             loadModuleWithAddr("host", header);
         }
