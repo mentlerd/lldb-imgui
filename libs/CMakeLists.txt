@@ -36,15 +36,16 @@ target_link_libraries(ImGui_Backend PUBLIC
 
 # =====/ Xcode's LLDB.framework /========================================
 
-if (XCODE)
+if (APPLE)
     add_library(XcodeLLDB INTERFACE)
 
-    # Infer the current Xcode's LLDB.framework location from the compiler
-    string(REGEX REPLACE 
-        "/Contents/Developer/Toolchains/.*" 
+    # Infer the current Xcode's LLDB.framework location from the toolchain
+    execute_process(COMMAND xcrun --show-sdk-path OUTPUT_VARIABLE sdk_path)
+    string(REGEX REPLACE
+        "/Contents/Developer/Platforms/.*"
         "/Contents/SharedFrameworks/LLDB.framework/LLDB"
         xcode_lldb
-        "${CMAKE_CXX_COMPILER}"
+        "${sdk_path}"
     )
     if (NOT EXISTS "${xcode_lldb}")
         message(SEND_ERROR "Failed to find Xcode's LLDB framework at '${xcode_lldb}'")

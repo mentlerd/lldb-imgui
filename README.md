@@ -7,3 +7,9 @@ At the moment this is nothing more than a crazy experiment meaning:
  - The code quality is not something I consider production ready :)
 
 That said, if you too are interested in creating your own debugger GUI feel free to look around
+
+## Zed
+```
+Shift + Command + R, Configure
+F4, Debug
+```

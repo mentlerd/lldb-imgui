@@ -17,7 +17,8 @@
             "inherits": "baseline",
 
             "cacheVariables": {
-                "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/llvm;/opt/homebrew/opt/sdl3"
+                "CMAKE_PREFIX_PATH": "/opt/homebrew/opt/llvm;/opt/homebrew/opt/sdl3",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
             }
         },
         {

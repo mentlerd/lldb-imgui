@@ -1,0 +1,14 @@
+[
+    {
+        "label": "Configure",
+        "command": "cmake",
+        "args": ["--preset", "macos", "-G", "'Ninja Multi-Config'"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+    },
+    {
+        "label": "Build",
+        "command": "cmake",
+        "args": ["--build", "build"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+    },
+]
