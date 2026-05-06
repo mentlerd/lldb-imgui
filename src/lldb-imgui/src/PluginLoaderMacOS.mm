@@ -134,8 +134,6 @@ void PluginLoaderMacOS::Update(PluginID id, PluginSpec spec) {
             plugin.watcher.reset();
         }
     }
-
-    return true;
 }
 
 void PluginLoaderMacOS::Remove(PluginID id) {

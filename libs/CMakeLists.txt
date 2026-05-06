@@ -8,7 +8,7 @@ add_subdirectory(spdlog)
 
 set(ImGui_ROOT "${CMAKE_SOURCE_DIR}/libs/imgui")
 
-file(GLOB ImGui_FILES CONFIGURE_DEPENDS 
+file(GLOB ImGui_FILES CONFIGURE_DEPENDS
 	"${ImGui_ROOT}/*.h"
 	"${ImGui_ROOT}/*.cpp"
 )
@@ -16,7 +16,7 @@ file(GLOB ImGui_FILES CONFIGURE_DEPENDS
 add_library(ImGui STATIC
 	${ImGui_FILES}
 )
-target_include_directories(ImGui SYSTEM PUBLIC 
+target_include_directories(ImGui SYSTEM PUBLIC
 	"${ImGui_ROOT}"
 )
 
@@ -51,15 +51,15 @@ if (APPLE)
         message(SEND_ERROR "Failed to find Xcode's LLDB framework at '${xcode_lldb}'")
     endif()
 
-    target_link_libraries(XcodeLLDB INTERFACE "${xcode_lldb}")    
+    target_link_libraries(XcodeLLDB INTERFACE "${xcode_lldb}")
 
-    # LLDB.framework doesn't contains public headers for the SB API, but the symbols 
+    # LLDB.framework doesn't contains public headers for the SB API, but the symbols
     # are still exported. Use the installed LLVM headers, and hope for the best..
     find_package(llvm REQUIRED config)
 
     target_include_directories(XcodeLLDB INTERFACE
         "${LLVM_INCLUDE_DIRS}"
-    )    
+    )
 endif()
 
 # =====/ Postprocessing /========================================

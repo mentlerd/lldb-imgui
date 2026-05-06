@@ -1,17 +1,17 @@
 set(target lldb-imgui)
 
-# No globbing this early into the project is just unsustainable.. 
-file(GLOB sources CONFIGURE_DEPENDS 
+# No globbing this early into the project is just unsustainable..
+file(GLOB sources CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/**/*.mm"
 )
 list(REMOVE_ITEM sources "${CMAKE_CURRENT_SOURCE_DIR}/src/MainRPCServer.mm")
 
-add_executable(${target} 
+add_executable(${target}
     ${sources}
 )
-target_link_libraries(${target} 
+target_link_libraries(${target}
     PUBLIC
         ImGui
         spdlog
@@ -78,13 +78,13 @@ if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
         add_custom_command(
             MAIN_DEPENDENCY "${icon_svg}"
             OUTPUT "${icon_png}"
-            COMMAND "${inkscape}" 
+            COMMAND "${inkscape}"
                 --export-type png
                 --export-filename "${icon_png}"
-                --export-area-page 
+                --export-area-page
                 --export-width "${icon_size}"
                 --export-height "${icon_size}"
-                "${icon_svg}" 
+                "${icon_svg}"
             VERBATIM
         )
         list(APPEND icon_pngs "${icon_png}")
@@ -98,10 +98,10 @@ if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
         VERBATIM
     )
 
-    target_sources(${target} PRIVATE 
+    target_sources(${target} PRIVATE
         "${icns}"
     )
-    set_target_properties(${target} PROPERTIES 
+    set_target_properties(${target} PROPERTIES
         MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
         RESOURCE "${icns}"
     )

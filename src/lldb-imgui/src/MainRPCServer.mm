@@ -185,11 +185,11 @@ namespace {
 auto loggerBuffer = std::make_shared<spdlog::sinks::ringbuffer_sink_mt>(1024);
 auto logger = [] {
     auto logger = spdlog::logger("Injection", loggerBuffer);
-    
+
     logger.set_level(spdlog::level::trace);
     logger.flush_on(spdlog::level::trace);
     logger.set_pattern("%L: %v");
-    
+
     return logger;
 }();
 
@@ -220,7 +220,7 @@ bool IsConnected(void* socket) {
         std::terminate();
     }
     std::string_view callerName(info.dli_sname);
-    
+
     if (callerName == kSocketRead || callerName == kSocketRead2) {
         // We are called from the original `Read()` function which we are trying
         // to escape. Pretend that the socket is closed
@@ -260,7 +260,7 @@ size_t Read(void* socket, std::string& buffer, bool append) {
     }
 }
 
-size_t Read2(void* socket, std::vector<uint8_t>& buffer, bool append) {
+void Read2(void* socket, std::vector<uint8_t>& buffer, bool append) {
     std::string staging;
     auto nread = Read(socket, staging, true);
 
@@ -456,11 +456,11 @@ bool Inject() {
 
         if (!socketRead) {
             logger.warn("Failed to find RPCConnectionSocket::Read virtual function");
-            return;
+            return false;
         }
         if (!socketIsConnected) {
             logger.warn("Failed to find RPCConnectionSocket::IsConnected virtual function");
-            return;
+            return false;
         }
 
         logger.info("Scanning for underying file descriptor...");
@@ -489,7 +489,7 @@ bool Inject() {
 
         if (!g_socketFDPtr) {
             logger.warn("Failed to find file descriptor in RPCConnectionSocket");
-            return;
+            return false;
         }
 
         // Spin-up a background thread to read the socket

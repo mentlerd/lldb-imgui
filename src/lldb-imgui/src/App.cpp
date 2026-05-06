@@ -1,8 +1,10 @@
 #include "App.h"
 
-#include "lldb/API/LLDB.h"
+#include "lldb/API/SBDebugger.h"
 
-#include "SDL3/SDL.h"
+#include "SDL3/SDL_dialog.h"
+#include "SDL3/SDL_log.h"
+#include "SDL3/SDL_timer.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"

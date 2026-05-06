@@ -5,7 +5,6 @@
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_gpu.h"
 
-#include <unordered_map>
 #include <string_view>
 #include <span>
 #include <vector>

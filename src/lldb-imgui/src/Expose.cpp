@@ -57,7 +57,7 @@ static SBTarget CreateSelfReflection() {
         spdlog::error("Failed to initialize LLDB API: {}", status.GetCString());
         return {};
     }
-    
+
     auto debugger = SBDebugger::Create(false, LogAdapter, nullptr);
     if (!debugger.IsValid()) {
         spdlog::error("Failed to create self-debugger!");
